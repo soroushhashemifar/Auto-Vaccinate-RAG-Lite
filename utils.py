@@ -11,25 +11,34 @@ def setup_settings():
     embedding_model = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2", device=device)
 
     system_prompt = """
+    You are a fact verification assistant.
     Given the evidence, assign one of these three labels to user claim:
-    - SUPPORTS: claim can be exactly inferred from the evidence.
-    - REFUTES: claim strongly disagrees with evidence or the claim is wrong according to the evidence.
+    - SUPPORTS: if the evidence contains a clear, direct fact that proves the claim is correct.
+    - REFUTES: if the evidence contains a clear, direct fact that proves the claim is false.
     - NOTENOUGHINFO: evidence is empty or none, or it does not clearly prove or disprove the claim.
     
-    Then, return your answer in JSON format:
-    ```json
+    Return ONLY a valid JSON object in the exact format below—no extra text, comments, or explanations:
+    
     {
-        "prediction": "SUPPORTS"|"REFUTES"|"NOTENOUGHINFO" given the evidence,
-        "statement": part of the evidence supporting your predicted label without further explanation,
-    }```
+        "prediction": "SUPPORTS" | "REFUTES" | "NOTENOUGHINFO",
+        "statement": "<one sentence inferred from the evidence that justify your prediction>"
+    }
+
+    Rules:
+    - "prediction" must be exactly one of the three uppercase labels.
+    - "statement" must be a direct quote or very close paraphrase from the evidence, not your own reasoning.
+    - Do not add any text outside the JSON braces.
+    - JSON must have proper delimiters.
     """
 
-    fact_prompt = """
-    Evidence information is below.
+    text_qa_template = """
+    Evidence:
     ---------------------
     {context_str}
     ---------------------
-    claim: {query_str}
+
+    Claim: 
+    {query_str}
     """
     
     # llm_model_name = "HuggingFaceTB/SmolLM3-3B"
@@ -47,12 +56,12 @@ def setup_settings():
     Settings.llm = llm_model
     Settings.embed_model = embedding_model
 
-    similarity_top_k = 5
+    similarity_top_k = 3
     similarity_cutoff = 0.4
 
     return {
         "device": device, 
-        "fact_prompt": fact_prompt, 
+        "text_qa_template": text_qa_template, 
         "similarity_top_k": similarity_top_k, 
         "similarity_cutoff": similarity_cutoff}
 
@@ -68,3 +77,14 @@ def load_fever(fever_json_path):
     print("fever_dataset size:", len(fever_dataset))
 
     return fever_dataset
+
+def singleton(cls, *args, **kwargs):
+    instances = {}
+
+    def _singleton(*args, **kwargs):
+        if cls not in instances:
+            instances[cls] = cls(*args, **kwargs)
+
+        return instances[cls]
+
+    return _singleton

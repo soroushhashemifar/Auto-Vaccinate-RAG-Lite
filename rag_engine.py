@@ -1,16 +1,17 @@
 from llama_index.core import Document
 from llama_index.core.node_parser import SentenceSplitter
 from llama_index.core.schema import IndexNode
-import pickle
-import faiss
 from llama_index.vector_stores.faiss import FaissVectorStore
 from llama_index.core.storage.storage_context import StorageContext
 from llama_index.core import VectorStoreIndex
 from llama_index.core.query_engine import RetrieverQueryEngine
-from llama_index.core import get_response_synthesizer
 from llama_index.core.retrievers import VectorIndexRetriever, RecursiveRetriever
 from llama_index.core.postprocessor import SimilarityPostprocessor
 from llama_index.core import PromptTemplate
+import pickle
+import faiss
+import json
+from triplet_extractor import TripletExtractor
 
 
 class RAGEngine:
@@ -26,6 +27,8 @@ class RAGEngine:
         self.build_nodes()
         self.prepare_storage()
         self.build_query_engine()
+
+        self.triplet_extractor = TripletExtractor(**kwargs)
 
     def build_nodes(self):
         """
@@ -88,7 +91,7 @@ class RAGEngine:
 
         self.query_engine = RetrieverQueryEngine.from_args(
             retriever_chunk,
-            text_qa_template=PromptTemplate(self.kwargs["fact_prompt"]),
+            text_qa_template=PromptTemplate(self.kwargs["text_qa_template"]),
             node_postprocessors=[
                 SimilarityPostprocessor(similarity_cutoff=self.kwargs["similarity_cutoff"], 
                                         filter_empty=True,
@@ -97,5 +100,11 @@ class RAGEngine:
                 ],
         )
 
-    def query(self, query_str):
-        return self.query_engine.query(query_str).response.strip()
+    def query(self, query_str, add_entity_triplets=False):
+        response = self.query_engine.query(query_str).response.strip()
+        response = json.loads(response)
+
+        if add_entity_triplets and "statement" in response:
+            response["entitity_relations"] = self.triplet_extractor.extract_triplets(response["statement"])
+
+        return response
