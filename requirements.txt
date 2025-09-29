@@ -1,0 +1,7 @@
+fever-drqa
+faiss-cpu
+llama-index
+llama-index-vector-stores-faiss
+sentence-transformers
+llama-index-embeddings-huggingface
+llama-index-llms-huggingface
