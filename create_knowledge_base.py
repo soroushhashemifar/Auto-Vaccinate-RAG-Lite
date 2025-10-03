@@ -93,7 +93,7 @@ class WikipagesKnowledgeBase:
 
             num_read_slices += 1
 
-            if num_read_slices == target_read_slices:
+            if target_read_slices > -1 and num_read_slices == target_read_slices:
                 break
 
         print("filtered_evidences size:", len(filtered_evidences))
