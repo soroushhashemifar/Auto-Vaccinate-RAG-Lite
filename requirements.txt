@@ -7,3 +7,4 @@ llama-index-embeddings-huggingface
 llama-index-llms-huggingface
 pyvis
 json-repair
+llama-index-retrievers-bm25

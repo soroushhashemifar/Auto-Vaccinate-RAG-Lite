@@ -16,6 +16,8 @@ import os
 from pathlib import Path
 from json_repair import repair_json
 from entailment import EntailmentChecker
+from llama_index.retrievers.bm25 import BM25Retriever
+import Stemmer
 
 
 class RAGEngine:
@@ -30,7 +32,8 @@ class RAGEngine:
             self.meta_data = content["meta_data"]
 
         self.build_nodes()
-        self.build_index()
+        # self.build_dense_retriever(self.kwargs["similarity_top_k"])
+        self.build_bm25_retriever(self.kwargs["similarity_top_k"])
         self.build_query_engine()
 
         self.triplet_extractor = TripletExtractor(**kwargs)
@@ -55,12 +58,12 @@ class RAGEngine:
         documents = [Document(text=sentence, extra_info=mdata) for sentence, mdata in zip(self.knowledge_base, self.meta_data)]
 
         # build parent chunks via NodeParser
-        node_parser = SentenceSplitter(chunk_size=128, chunk_overlap=32)
+        node_parser = SentenceSplitter(chunk_size=128, chunk_overlap=16)
         base_nodes = node_parser.get_nodes_from_documents(documents)
         self.all_nodes = base_nodes
 
         # # define smaller child chunks
-        # sub_chunk_sizes = [32, 64, 128]
+        # sub_chunk_sizes = [32, 64]
         # sub_node_parsers = [
         #     SentenceSplitter(chunk_size=c, chunk_overlap=16) for c in sub_chunk_sizes
         # ]
@@ -82,9 +85,9 @@ class RAGEngine:
 
         Path(self.kwargs["rag_storage_dir"]).mkdir(parents=True, exist_ok=True)
         with open(os.path.join(self.kwargs["rag_storage_dir"], 'nodes.pkl'), 'wb') as f:
-            pickle.dump({"all_nodes": self.all_nodes, "all_nodes_dict": self.all_nodes_dict}, f)
+            pickle.dump({"all_nodes": self.all_nodes, "all_nodes_dict": self.all_nodes_dict}, f)        
 
-    def build_index(self):
+    def build_dense_retriever(self, similarity_top_k):
         """
             source: https://developers.llamaindex.ai/python/framework/module_guides/loading/documents_and_nodes/usage_documents/
             source: https://github.com/run-llama/llama_index/issues/6977
@@ -92,37 +95,55 @@ class RAGEngine:
             source: https://app.readytensor.ai/publications/retrieval-augmented-generation-using-llamaindex-faiss-and-openai-gpt-4-SfLlZniaZJ9C
         """
 
-        if os.path.exists(os.path.join(self.kwargs["rag_storage_dir"], 'index_store.json')):
+        if os.path.exists(os.path.join(self.kwargs["dense_retriever_storage"], 'index_store.json')):
             print("[MSG] Loading vector index...")
             
-            vector_store = FaissVectorStore.from_persist_dir(self.kwargs["rag_storage_dir"])
-            storage_context = StorageContext.from_defaults(vector_store=vector_store, persist_dir=self.kwargs["rag_storage_dir"])
-            self.index = load_index_from_storage(storage_context)
+            vector_store = FaissVectorStore.from_persist_dir(self.kwargs["dense_retriever_storage"])
+            storage_context = StorageContext.from_defaults(vector_store=vector_store, persist_dir=self.kwargs["dense_retriever_storage"])
+            index = load_index_from_storage(storage_context)
+        else:
+            print("[MSG] Building vector index...")
 
-            return
+            faiss_index = faiss.IndexFlatL2(384)
+            vector_store = FaissVectorStore(faiss_index=faiss_index)
 
-        print("[MSG] Building vector index...")
+            storage_context = StorageContext.from_defaults(vector_store=vector_store)
 
-        faiss_index = faiss.IndexFlatL2(384)
-        vector_store = FaissVectorStore(faiss_index=faiss_index)
+            index = VectorStoreIndex(self.all_nodes, storage_context=storage_context, show_progress=True)
+            index.storage_context.persist(persist_dir=self.kwargs["dense_retriever_storage"])
 
-        storage_context = StorageContext.from_defaults(vector_store=vector_store)
-
-        self.index = VectorStoreIndex(self.all_nodes, storage_context=storage_context, show_progress=True)
-        self.index.storage_context.persist(persist_dir=self.kwargs["rag_storage_dir"])
-
-    def build_retriever(self):
-        retriever = VectorIndexRetriever(index=self.index, similarity_top_k=self.kwargs["similarity_top_k"])
+        self.retriever = VectorIndexRetriever(
+            index=index, 
+            similarity_top_k=similarity_top_k
+        )
 
         # # build RecursiveRetriever
-        # retriever = RecursiveRetriever(
+        # self.retriever = RecursiveRetriever(
         #     "vector",
-        #     retriever_dict={"vector": retriever},
+        #     retriever_dict={"vector": self.retriever},
         #     node_dict=self.all_nodes_dict,
         #     verbose=False,
         # )
 
-        return retriever
+    def build_bm25_retriever(self, similarity_top_k):
+        """
+            reference: https://developers.llamaindex.ai/python/examples/retrievers/bm25_retriever/
+        """
+        
+        if os.path.exists(self.kwargs["bm25_retriever_storage"]):
+            print("[MSG] Loading BM25 retriever...")
+            
+            self.retriever = BM25Retriever.from_persist_dir(self.kwargs["bm25_retriever_storage"])
+        else:
+            print("[MSG] Building BM25 retriever...")
+
+            self.retriever = BM25Retriever.from_defaults(
+                nodes=self.all_nodes,
+                similarity_top_k=similarity_top_k,
+                stemmer=Stemmer.Stemmer("english"),
+                language="english",
+            )
+            self.retriever.persist(self.kwargs["bm25_retriever_storage"])
 
     def build_query_engine(self):
         """
@@ -132,9 +153,8 @@ class RAGEngine:
 
         print("[MSG] Building RAG query engine...")
 
-        retriever = self.build_retriever()
         self.query_engine = RetrieverQueryEngine.from_args(
-            retriever, #retriever_chunk,
+            self.retriever, #retriever_chunk,
             response_mode="compact_accumulate",
             text_qa_template=PromptTemplate(self.kwargs["text_qa_template"]),
             node_postprocessors=[
@@ -147,19 +167,18 @@ class RAGEngine:
 
         print("[MSG] RAG query engine is ready to go.")
     
-    def failure_label(self, response):
+    def get_failure_label(self, response):
         rag_prediction = response["prediction"]
-        kg_result = response["consistency_check"]
-        nli_evidence_result = response["entailment_check"]["evidence"]
-        nli_claim_result = response["entailment_check"]["claim"]
+        kg_result = response.get("consistency_check", "CONSISTENT")
+        nli_evidence_result = response.get("entailment_check", {"evidence": "ENTAILMENT"})["evidence"]
+        nli_claim_result = response.get("entailment_check", {"claim": "ENTAILMENT"})["claim"]
 
-        failure_label = None
-        if rag_prediction == "SUPPORTS" and kg_result == "CONSISTENT" and nli_evidence_result == "ENTAILMENT" and nli_claim_result == "ENTAILMENT":
-            failure_label = "RAG_SUCCESS"
-        elif rag_prediction == "REFUTES" and kg_result == "CONSISTENT" and nli_evidence_result == "ENTAILMENT" and nli_claim_result == "CONTRADICTION":
-            failure_label = "RAG_SUCCESS"
-        elif rag_prediction == "NOTENOUGHINFO" and kg_result == "MISSING" and nli_claim_result == "NEUTRAL":
-            failure_label = "RAG_SUCCESS"
+        failure_label = "RAG_SUCCESS"
+        if nli_claim_result == "NEUTRAL":
+            failure_label = "RETRIEVAL_MISSING_EVIDENCE"
+        elif rag_prediction != "NOTENOUGHINFO" and nli_evidence_result == "NEUTRAL":
+            failure_label = "RAG_HALLUCINATION"
+        
         elif rag_prediction == "NOTENOUGHINFO" and kg_result == "MISSING" and nli_claim_result != "NEUTRAL":
             failure_label = "RAG_WRONG_NEI"
         elif rag_prediction != "NOTENOUGHINFO" and kg_result == "MISSING" and nli_claim_result == "NEUTRAL":
@@ -171,7 +190,7 @@ class RAGEngine:
         
         return failure_label
 
-    def query(self, query_str, add_entity_triplets=False, consistency_check=False, entailment_check=False):
+    def query(self, query_str, add_entity_triplets=False, consistency_check=False, entailment_check=False, failure_check=False):
         response_object = self.query_engine.query(query_str)
         response = response_object.response.strip()
         if response == "Empty Response":
@@ -193,5 +212,8 @@ class RAGEngine:
 
         if entailment_check and "evidence" in response:
             response["entailment_check"] = self.entailment_checker.check(query_str, response["evidence"], response["retrieved_context"])
+
+        if failure_check:
+            response["failure_check"] = self.get_failure_label(response)
 
         return response

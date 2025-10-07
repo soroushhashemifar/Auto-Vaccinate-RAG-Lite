@@ -60,7 +60,7 @@ class WikipagesKnowledgeBase:
 
     def convert_brc(self, string):
         """
-            source: https://github.com/easonnie/combine-FEVER-NSMN/blob/master/src/utils/fever_db.py
+            reference: https://github.com/easonnie/combine-FEVER-NSMN/blob/master/src/utils/fever_db.py
         """
 
         string = re.sub('-LRB-', '(', string)
@@ -128,4 +128,4 @@ class WikipagesKnowledgeBase:
 
 
 if __name__ == "__main__":
-    WikipagesKnowledgeBase().build("./shared_task_dev.jsonl", "./wiki-pages", 5)
+    WikipagesKnowledgeBase().build("./shared_task_dev.jsonl", "./wiki-pages", 1)

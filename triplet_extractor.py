@@ -6,7 +6,7 @@ from utils import singleton
 class TripletExtractor:
 
     """
-        source: https://developers.llamaindex.ai/python/examples/index_structs/knowledge_graph/knowledge_graph2/
+        reference: https://developers.llamaindex.ai/python/examples/index_structs/knowledge_graph/knowledge_graph2/
     """
 
     def __init__(self, **kwargs):

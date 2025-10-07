@@ -14,10 +14,10 @@ import pickle
 class WikiMoviesKnowledgeGraph:
 
     """
-        source: https://github.com/run-llama/llama_index/issues/13129
-        source: https://www.datacamp.com/tutorial/knowledge-graph-rag
-        source: https://github.com/run-llama/llama_index/issues/13129
-        source: https://developers.llamaindex.ai/python/examples/index_structs/knowledge_graph/knowledge_graph2/
+        reference: https://github.com/run-llama/llama_index/issues/13129
+        reference: https://www.datacamp.com/tutorial/knowledge-graph-rag
+        reference: https://github.com/run-llama/llama_index/issues/13129
+        reference: https://developers.llamaindex.ai/python/examples/index_structs/knowledge_graph/knowledge_graph2/
     """
 
     def __init__(self, **kwargs):
@@ -45,7 +45,6 @@ class WikiMoviesKnowledgeGraph:
 
         documents = []
         for line in tqdm.tqdm(content):
-            # TODO: extracts 8852 a out of 100000, WHY?
             parts = re.findall(r'\d+\s([\w\s\d]+\?)[\s\t]+([\w\s\d,;:\.\!\?\-\_]+)', line.strip())
             if len(parts) > 0:
                 text = " ".join(parts[0])
@@ -70,6 +69,24 @@ class WikiMoviesKnowledgeGraph:
                 documents.append(document)
 
         return documents
+    
+    def manual_check_triplets(self, wikimovies_dir_path, knowledge_base_pkl_path, cutoff=-1):
+        triplet_documents = self.create_wikimovies_triplets(wikimovies_dir_path, cutoff)
+        print("triplet_documents size:", len(triplet_documents))
+        print(triplet_documents[0])
+
+        kb_documents = self.load_KB_documents(knowledge_base_pkl_path)
+        triplet_documents.extend(kb_documents)
+        print("kb_documents size:", len(kb_documents))
+        print(kb_documents[0])
+
+        with open("./KB_triplets.txt", "w+") as file:
+            for document in tqdm.tqdm(triplet_documents):
+                text = document.text
+                triplets = self.triplet_extractor.extract_triplets(text)
+                for triplet in triplets:
+                    triplet = f"SUBJECT: {triplet[0]} || PREDICATE: {triplet[1]} || OBJECT: {triplet[2]}"
+                    file.write(text + " || " + triplet + " \n")
 
     def index_nodes(self, triplet_documents):
         graph_store = SimpleGraphStore()
@@ -117,19 +134,25 @@ class WikiMoviesKnowledgeGraph:
         if len(input_text) > 0:
             triplets = self.triplet_extractor.extract_triplets(input_text)
             for sub, rel, obj in triplets:
-                response = self.query_engine.query(f"""
-                subject: {sub} 
-                relation: {rel}
-                object: {obj}
-                """).response.strip()
+                response_obj = self.query_engine.query(f"""[subject:{sub}] - [predicate:{rel}] - [object:{obj}]""")
+                prediction = response_obj.response.strip()
 
-                consistency_checks.append(response)
+                context = " ".join([node.dict()['node']['text'] for node in response_obj.source_nodes])
+                if sub not in context or obj not in context:
+                    prediction = "MISSING"
+
+                if "CONFLICT" in prediction:
+                    prediction = "CONFLICT"
+                elif "CONSISTENT" in prediction:
+                    prediction = "CONSISTENT"
+
+                consistency_checks.append(prediction)
 
         if "CONFLICT" in consistency_checks:
             return "CONFLICT"
         elif "MISSING" in consistency_checks:
             return "MISSING"
-        elif all(map(lambda item: item == "CONSISTENT", consistency_checks)):
+        else:
             return "CONSISTENT"
 
     def plot(self):
