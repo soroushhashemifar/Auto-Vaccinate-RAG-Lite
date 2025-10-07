@@ -1,30 +1,22 @@
-from sentence_transformers import CrossEncoder
-import torch
+from transformers import pipeline
 from utils import singleton
 
 
 @singleton
 class EntailmentChecker:
 
-    def __init__(self):
-        self.model = CrossEncoder("cross-encoder/nli-roberta-base")
-        self.entailment_labels = ['CONTRADICTION', 'ENTAILMENT', 'NEUTRAL']
+    def __init__(self, **kwargs):
+        self.model = pipeline("text-classification", model="tasksource/ModernBERT-base-nli", device=kwargs["device"])
 
     def check(self, claim, rag_evidence, retrieved_context):
-        claim_entailment_checks = []
-        evidence_entailment_checks = []
-        for chunk in retrieved_context:
-            context = chunk['text']
-            logits = self.model.predict([(context, claim), (context, rag_evidence)])
-            label_scores = torch.softmax(torch.from_numpy(logits), -1).tolist()
+        text_input = " ".join([item['text'] for item in retrieved_context])
 
-            claim_entailment_checks.append(label_scores[0])
-            evidence_entailment_checks.append(label_scores[1])
+        claim_pred = self.model([{"text": text_input, "text_pair": claim}], top_k=None)[0]
+        claim_results = [(p['label'].upper(), p['score']) for p in claim_pred]
+        claim_entailment_label = max(claim_results, key=lambda item: item[1])[0]
 
-        claim_entailment_scores = torch.tensor(claim_entailment_checks).mean(0)
-        evidence_entailment_scores = torch.tensor(evidence_entailment_checks).mean(0)
+        rag_pred = self.model([{"text": text_input, "text_pair": rag_evidence}], top_k=None)[0]
+        rag_results = [(p['label'].upper(), p['score']) for p in rag_pred]
+        rag_entailment_label = max(rag_results, key=lambda item: item[1])[0]
 
-        claim_entailment_label = self.entailment_labels[claim_entailment_scores.argmax()]
-        evidence_entailment_label = self.entailment_labels[evidence_entailment_scores.argmax()]
-
-        return {"claim": claim_entailment_label, "evidence": evidence_entailment_label}
+        return {"claim": claim_entailment_label, "evidence": rag_entailment_label}

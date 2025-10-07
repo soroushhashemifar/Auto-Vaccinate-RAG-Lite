@@ -29,6 +29,7 @@ def setup_settings():
     Settings.embed_model = embedding_model
 
     similarity_top_k = 3
+    reranker_top_n = 3
     similarity_cutoff = 0.4
     rag_storage_dir = "./storage_rag"
     kg_storage_dir = "./storage_kg"
@@ -39,6 +40,7 @@ def setup_settings():
         "device": device, 
         "text_qa_template": rag_fact_verif_prompt, 
         "similarity_top_k": similarity_top_k, 
+        "reranker_top_n": reranker_top_n,
         "similarity_cutoff": similarity_cutoff,
         "rag_storage_dir": rag_storage_dir,
         "kg_storage_dir": kg_storage_dir,

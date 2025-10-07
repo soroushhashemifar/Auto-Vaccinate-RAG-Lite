@@ -77,6 +77,27 @@ if __name__ == "__main__":
     print("Prediction:", rag.query("People in Lithuania identify themselves as Americans."))
     print("Prediction:", rag.query("People in Armenia identify themselves as Lithuanians."))
     print("Prediction:", rag.query("People in Armenia identify themselves as European."))
+    
+    rag.build_dense_retriever(5, reindex=True)
+    print("Prediction:", rag.query("Whole population of Lithuania identify themselves as Lithuanians."))
+    print("Prediction:", rag.query("Half of the population of Lithuania identify themselves as Lithuanians."))
+    print("Prediction:", rag.query("People in Lithuania identify themselves as Americans."))
+    print("Prediction:", rag.query("People in Armenia identify themselves as Lithuanians."))
+    print("Prediction:", rag.query("People in Armenia identify themselves as European."))
+
+    rag.build_dense_retriever(10, reindex=True)
+    print("Prediction:", rag.query("Whole population of Lithuania identify themselves as Lithuanians."))
+    print("Prediction:", rag.query("Half of the population of Lithuania identify themselves as Lithuanians."))
+    print("Prediction:", rag.query("People in Lithuania identify themselves as Americans."))
+    print("Prediction:", rag.query("People in Armenia identify themselves as Lithuanians."))
+    print("Prediction:", rag.query("People in Armenia identify themselves as European."))
+
+    rag.build_query_engine(reranker=True)
+    print("Prediction:", rag.query("Whole population of Lithuania identify themselves as Lithuanians."))
+    print("Prediction:", rag.query("Half of the population of Lithuania identify themselves as Lithuanians."))
+    print("Prediction:", rag.query("People in Lithuania identify themselves as Americans."))
+    print("Prediction:", rag.query("People in Armenia identify themselves as Lithuanians."))
+    print("Prediction:", rag.query("People in Armenia identify themselves as European."))
     exit()
 
 
