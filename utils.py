@@ -14,6 +14,9 @@ def setup_settings():
     with open(os.path.join("prompts", "fact_verif.txt"), 'r') as file:
         rag_fact_verif_prompt = file.read()
 
+    with open(os.path.join("prompts", "fact_verif_edit.txt"), 'r') as file:
+        rag_fact_verif_edit_prompt = file.read()
+
     with open(os.path.join("prompts", "kg_consist.txt"), 'r') as file:
         knowledge_graph_completion_prompt = file.read()
     
@@ -38,7 +41,8 @@ def setup_settings():
 
     return {
         "device": device, 
-        "text_qa_template": rag_fact_verif_prompt, 
+        "rag_fact_verif_prompt": rag_fact_verif_prompt, 
+        "rag_fact_verif_edit_prompt": rag_fact_verif_edit_prompt,
         "similarity_top_k": similarity_top_k, 
         "reranker_top_n": reranker_top_n,
         "similarity_cutoff": similarity_cutoff,

@@ -38,7 +38,7 @@ class RAGEngine:
         self.build_query_engine(reranker=False)
 
         self.triplet_extractor = TripletExtractor(**kwargs)
-        self.entailment_checker = EntailmentChecker()
+        self.entailment_checker = EntailmentChecker(**kwargs)
 
     def build_nodes(self):
         """
@@ -119,7 +119,7 @@ class RAGEngine:
             )
             self.retriever.persist(self.kwargs["bm25_retriever_storage"])
 
-    def build_query_engine(self, similarity_posprocess=False, reranker=False):
+    def build_query_engine(self, similarity_posprocess=False, reranker=False, prompt_edit=False):
         """
             source: https://www.llamaindex.ai/blog/evaluating-rag-with-deepeval-and-llamaindex
             source: https://www.llamaindex.ai/blog/a-cheat-sheet-and-some-recipes-for-building-advanced-rag-803a9d94c41b
@@ -148,7 +148,9 @@ class RAGEngine:
         self.query_engine = RetrieverQueryEngine.from_args(
             self.retriever, 
             response_mode="compact_accumulate",
-            text_qa_template=PromptTemplate(self.kwargs["text_qa_template"]),
+            text_qa_template=PromptTemplate(
+                self.kwargs["rag_fact_verif_prompt"] if not prompt_edit else self.kwargs["rag_fact_verif_edit_prompt"]
+            ),
             node_postprocessors=node_postprocessors
         )
 

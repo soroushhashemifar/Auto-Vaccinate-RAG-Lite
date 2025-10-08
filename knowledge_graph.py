@@ -148,10 +148,14 @@ class WikiMoviesKnowledgeGraph:
 
                 consistency_checks.append(prediction)
 
-        if "CONFLICT" in consistency_checks:
-            return "CONFLICT"
-        elif "MISSING" in consistency_checks:
+        if "MISSING" in consistency_checks:
             return "MISSING"
+        elif "CONFLICT" in consistency_checks:
+            return "CONFLICT"
+        elif len(input_text) == 0:
+            return "EMPTYINPUT"
+        elif len(consistency_checks) == 0:
+            return "NOTRIPLETS"
         else:
             return "CONSISTENT"
 
