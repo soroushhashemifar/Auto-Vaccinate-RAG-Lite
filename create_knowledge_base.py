@@ -8,16 +8,18 @@ from drqa.retriever import utils
 
 class WikipagesKnowledgeBase:
 
-    def create_inverse_evidence_map(self, fever_json_path):
+    def create_inverse_evidence_map(self, fever_json_path, claim_cutoff=-1):
         with open(fever_json_path, 'r') as json_file:
             json_list = list(json_file)
+
+            if claim_cutoff != -1:
+                json_list = json_list[:claim_cutoff]
 
             inverse_evidence_map = {}
             for json_str in tqdm.tqdm(json_list):
                 result = json.loads(json_str)
 
                 evidences = result['evidence']
-                transformed_evidences = []
                 for evidence in evidences:
                     if evidence[0][2] is not None:
                         claim_id_list = inverse_evidence_map.get(evidence[0][2], [])
@@ -116,16 +118,18 @@ class WikipagesKnowledgeBase:
 
         return knowledge_base, meta_data
 
-    def build(self, fever_json_path, wikipages_dir_path, target_read_slices):
-        inverse_evidence_map = self.create_inverse_evidence_map(fever_json_path)
+    def build(self, fever_json_path, wikipages_dir_path, target_read_slices, claim_cutoff=-1, filepath='out/wikipages_knowledge_base.pkl'):
+        inverse_evidence_map = self.create_inverse_evidence_map(fever_json_path, claim_cutoff=claim_cutoff)
         knowledge_base, meta_data = self.create_knowledge_base(wikipages_dir_path, inverse_evidence_map, target_read_slices)
 
         print(knowledge_base[0])
         print(meta_data[0])
 
-        with open('./wikipages_knowledge_base.pkl', 'wb') as f:
+        with open(filepath, 'wb') as f:
             pickle.dump({"knowledge_base": knowledge_base, "meta_data": meta_data}, f)
 
 
 if __name__ == "__main__":
-    WikipagesKnowledgeBase().build("./shared_task_dev.jsonl", "./wiki-pages", 1)
+    wkb = WikipagesKnowledgeBase()
+    wkb.build("./shared_task_dev.jsonl", "./wiki-pages", -1, 500)
+    # wkb.build("./shared_task_dev.jsonl", "./wiki-pages", -1)

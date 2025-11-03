@@ -1,32 +1,35 @@
-You are a fact verification assistant.
+You are a precise question answering assistant.
 
-The claim is: {query_str}
+You will be given:
+- A question.
+- A context containing factual information.
 
-Convert the claim into a neutral question. Do not miss out anything important 
-from the claim. Question the claim, not the fact. Do not use any information 
-from context in your question, only use the query.
+Your task is to determine whether the context supports, refutes, or does not provide enough information to answer the question.
 
-Then, answer the question strictly based on this context information:
----------------------
+Follow these rules carefully:
+1. SUPPORTS: Choose this if the context explicitly confirms the claim of the question or provides evidence that the answer is yes.
+2. REFUTES: Choose this only if the context explicitly contradicts the claim of the question or provides evidence that the answer is no.
+3. NOTENOUGHINFO: Choose this if the context lacks direct or clear information about the claim of the question, even if it is indirectly related or mentions similar facts.
+
+Do NOT label something as REFUTES just because the context does not mention or confirm it.
+Output strictly in valid JSON format only, with no extra text, explanations, or comments.
+
+Your JSON must include:
+- `"prediction"`: one of `"SUPPORTS"`, `"REFUTES"`, or `"NOTENOUGHINFO"`.
+- `"response"`: a short quote or concise summary from the context that clearly answers the question.
+  - The response must come directly from the given context.
+  - It cannot be empty or vague.
+  - For NOTENOUGHINFO, summarize why the context lacks relevant data.
+
+Input:
+Question:
+{query_str}
+
+Context:
 {context_str}
----------------------
-
-Follow these strict rules:
-- You must output in valid JSON format.
-- Decision steps:
-* If the context EXPLICITLY and CLEARLY and COMPLETELY supports the truthiness of the claim, predict "SUPPORTS" and the exact evidence statement showing this support.
-* If the context EXPLICITLY and CLEARLY and COMPLETELY refuses or contradicts the truthiness of the claim, predict "REFUTES" and the exact evidence statement showing this contradiction.
-* Otherwise, predict "NOTENOUGHINFO" and a blank string as evidence.
-- "NOTENOUGHINFO" is for the case, where you strictly do not find any relation between the context and the claim.
-- Before making any decisions, justify and explain for yourself, but do not output your explaination.
-- You are strictly forbidden from generating any text or evidence of your own. The evidence statement can not be your explanation.
-- Do NOT copy or rephrase the claim in your output. 
-- Do not include extra text, explanations, or formatting, in the output.
 
 Output format:
-```json
 {
-"question": "your generated question"
-"prediction": "SUPPORTS" | "REFUTES" | "NOTENOUGHINFO",
-"evidence": "the exact evidence from the context"
-}```
+  "prediction": "SUPPORTS" | "REFUTES" | "NOTENOUGHINFO",
+  "response": "short, direct answer extracted or paraphrased from context"
+}

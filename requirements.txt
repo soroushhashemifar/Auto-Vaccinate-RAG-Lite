@@ -8,3 +8,8 @@ llama-index-llms-huggingface
 pyvis
 json-repair
 llama-index-retrievers-bm25
+ragas
+langchain-huggingface
+bitsandbytes
+cloudpickle
+peft

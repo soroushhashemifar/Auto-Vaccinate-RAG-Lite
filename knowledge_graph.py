@@ -9,6 +9,7 @@ from pyvis.network import Network
 from triplet_extractor import TripletExtractor
 from llama_index.core import PromptTemplate
 import pickle
+# from create_knowledge_base import WikipagesKnowledgeBase
 
 
 class WikiMoviesKnowledgeGraph:
@@ -56,31 +57,43 @@ class WikiMoviesKnowledgeGraph:
 
         return documents
 
-    def load_KB_documents(self, knowledge_base_pkl_path):
+    def load_KB_documents(self, knowledge_base_pkl_path, cutoff):
         with open(knowledge_base_pkl_path, 'rb') as f:
             content = pickle.load(f)
-            self.knowledge_base = content["knowledge_base"]
-            self.meta_data = content["meta_data"]
+            knowledge_base = content["knowledge_base"]
+            meta_data = content["meta_data"]
 
         documents = []
-        for doc, mdata in zip(self.knowledge_base, self.meta_data):
-            for sentence in doc.split(" . "):
-                document = Document(text=sentence, extra_info=mdata)
-                documents.append(document)
+        for text, mdata in zip(knowledge_base, meta_data):
+            # for sentence in text.split(" . "):
+            #     document = Document(text=sentence + ".", extra_info={"doc_id": evidence[0]})
+            #     documents.append(document)
+
+            #     if cutoff > -1 and len(documents) == cutoff:
+            #         break
+
+            document = Document(text=text, extra_info=mdata)
+            documents.append(document)
+            
+            if cutoff > -1 and len(documents) == cutoff:
+                break
 
         return documents
     
     def manual_check_triplets(self, wikimovies_dir_path, knowledge_base_pkl_path, cutoff=-1):
-        triplet_documents = self.create_wikimovies_triplets(wikimovies_dir_path, cutoff)
-        print("triplet_documents size:", len(triplet_documents))
-        print(triplet_documents[0])
+        triplet_documents = []
 
-        kb_documents = self.load_KB_documents(knowledge_base_pkl_path)
+        # wm_documents = self.create_wikimovies_triplets(wikimovies_dir_path, cutoff)
+        # triplet_documents.extend(wm_documents)
+        # print("triplet_documents size:", len(triplet_documents))
+        # print(triplet_documents[0])
+
+        kb_documents = self.load_KB_documents(knowledge_base_pkl_path, cutoff)
         triplet_documents.extend(kb_documents)
         print("kb_documents size:", len(kb_documents))
         print(kb_documents[0])
 
-        with open("./KB_triplets.txt", "w+") as file:
+        with open("out/KB_triplets.txt", "w+") as file:
             for document in tqdm.tqdm(triplet_documents):
                 text = document.text
                 triplets = self.triplet_extractor.extract_triplets(text)
@@ -98,7 +111,7 @@ class WikiMoviesKnowledgeGraph:
             include_embeddings=True,
             kg_triplet_extract_fn=self.triplet_extractor.extract_triplets, #self.extract_triplets,
             storage_context=storage_context,
-            show_progress=False,
+            show_progress=True,
         )
         self.index.storage_context.persist(persist_dir=self.kwargs["kg_storage_dir"])
 
@@ -112,11 +125,14 @@ class WikiMoviesKnowledgeGraph:
         else:
             print("[MSG] Building knowledge graph...")
 
-            triplet_documents = self.create_wikimovies_triplets(wikimovies_dir_path, cutoff)
-            print("triplet_documents size:", len(triplet_documents))
-            print(triplet_documents[0])
+            triplet_documents = []
 
-            kb_documents = self.load_KB_documents(knowledge_base_pkl_path)
+            # wm_documents = self.create_wikimovies_triplets(wikimovies_dir_path, cutoff)
+            # triplet_documents.extend(wm_documents)
+            # print("triplet_documents size:", len(triplet_documents))
+            # print(triplet_documents[0])
+
+            kb_documents = self.load_KB_documents(knowledge_base_pkl_path, cutoff)
             triplet_documents.extend(kb_documents)
             print("kb_documents size:", len(kb_documents))
             print(kb_documents[0])
@@ -137,13 +153,13 @@ class WikiMoviesKnowledgeGraph:
                 response_obj = self.query_engine.query(f"""[subject:{sub}] - [predicate:{rel}] - [object:{obj}]""")
                 prediction = response_obj.response.strip()
 
-                context = " ".join([node.dict()['node']['text'] for node in response_obj.source_nodes])
-                if sub not in context or obj not in context:
+                context = " ".join([node.dict()['node']['text'] for node in response_obj.source_nodes]).lower()
+                if sub.lower() not in context or obj.lower() not in context:
                     prediction = "MISSING"
 
-                if "CONFLICT" in prediction:
+                if "conflict" in prediction.lower():
                     prediction = "CONFLICT"
-                elif "CONSISTENT" in prediction:
+                elif "consistent" in prediction.lower():
                     prediction = "CONSISTENT"
 
                 consistency_checks.append(prediction)
@@ -163,4 +179,4 @@ class WikiMoviesKnowledgeGraph:
         g = self.index.get_networkx_graph()
         net = Network(notebook=True, cdn_resources="in_line", directed=True)
         net.from_nx(g)
-        net.show('./knowledge_gragh_plot.html')
+        net.show('out/knowledge_gragh_plot.html')

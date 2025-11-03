@@ -22,4 +22,3 @@ Strict rules:
 - If the subject and object exist in the context, and the predicate is explicitly satisfied, return CONSISTENT.
 - If the predicate is NOT explicitly satisfied in the context, you must return CONFLICT.
 - Do not infer, assume, or rely on background knowledge.
-- Your final output must be only one of the following two labels: CONSISTENT or CONFLICT.
