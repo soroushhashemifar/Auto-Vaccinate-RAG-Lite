@@ -1,0 +1,11 @@
+Latency 4.5092014192799885
+VRAM Usage 292.505205078125
+KG Consistency 0.38
+Task accuracy: 0.62
+{'answer_relevancy': 0.3626, 'faithfulness': 0.4504}
+
+Latency 4.524279792999996
+VRAM Usage 258.87216796875
+KG Consistency 0.5
+Task accuracy: 0.76
+{'answer_relevancy': 0.3471, 'faithfulness': 0.5238}

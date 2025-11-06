@@ -2,13 +2,13 @@ import os
 # prevent JAX from using gpu to avoid bm25s eat up the gpu memory
 os.environ['JAX_PLATFORMS'] = 'cpu'
 
+from lora_engine import LoRAEngine
 from knowledge_graph import WikiMoviesKnowledgeGraph
-from utils import setup_settings
+from utils import load_fever_with_evidence, setup_settings
 from rag_engine import RAGEngine
-from utils import load_fever
 import tqdm
 from datasets import Dataset
-from patcher import BanditPatcher, BanditPatcherGR 
+from patcher import BanditPatcherGR 
 
 
 if __name__ == "__main__":
@@ -17,14 +17,12 @@ if __name__ == "__main__":
     kgraph = WikiMoviesKnowledgeGraph(**setup)
     kgraph.build("./movieqa", "out/wikipages_knowledge_base.pkl", -1)
     rag = RAGEngine("out/wikipages_knowledge_base.pkl", knowledge_graph=kgraph, **setup)
+    lora_adapter = LoRAEngine(max_steps=50)
 
-    fever_dataset = load_fever("./shared_task_dev.jsonl")
-    # subset = random.choices(fever_dataset, k=100)
+    fever_dataset = load_fever_with_evidence("./shared_task_dev.jsonl", "out/wikipages_knowledge_base.pkl", 500)
     subset = fever_dataset[:100]
 
-    # patcher = BanditPatcher(latency_budget=6, vram_budget=None, method="linucb")
-    patcher = BanditPatcherGR(latency_budget=5, vram_budget=None, method="linucb")
-    # patcher.load_bandit()
+    patcher = BanditPatcherGR(latency_budget=3*60, vram_budget=14000, method="linucb", alpha=(1.2, 1.2))
 
     data = {
         "index": [],
@@ -44,8 +42,10 @@ if __name__ == "__main__":
         "failure_label": [],
         "bandit_reward": [],
     }
+
+    failure_shards = {}
     claim_idx = 0
-    for claim, label in tqdm.tqdm(subset):
+    for claim, label, evidences in tqdm.tqdm(subset):
         params = {'retriever': 'dense', 'topk': 10, 'reranker': False, 'prompt_edit': False, 'reindex': False}
         pred = rag.query(claim, params=params, consistency_check=True, entailment_check=True)
 
@@ -58,7 +58,7 @@ if __name__ == "__main__":
 
             failure_label = patcher.get_failure_label(pred)
 
-        reward = patcher.calculate_reward(failure_label, pred["raw_response"], pred["prediction"], label, pred["consistency_check"], pred["entailment_check"]["response"], pred["latency"], pred["vram_usage"])
+        reward = patcher.calculate_reward(failure_label, pred["prediction"], label, pred["consistency_check"], pred["entailment_check"]["response"], pred["latency"], pred["vram_usage"])
 
         data["index"].append(claim_idx)
         data["question"].append(claim)
@@ -77,27 +77,32 @@ if __name__ == "__main__":
         data["failure_label"].append(failure_label)
         data["bandit_reward"].append(str(reward))
 
-        patcher.latest_component = patcher.detect_component(failure_label)
-        if patcher.latest_component == "generation":
-            total_actions = patcher.possible_actions_generation
-        elif patcher.latest_component == "retrieval":
-            total_actions = patcher.possible_actions_retrieval
-        else:
-            total_actions = []
-
-        # if failure_label != "NO_FAILURE":
-        #     total_actions = patcher.possible_actions
-        # else:
-        #     total_actions = []
-
-        for action in total_actions:
+        if failure_label != "NO_FAILURE":
             params = {'retriever': 'dense', 'topk': 10, 'reranker': False, 'prompt_edit': False, 'reindex': False}
             
-            context = patcher.get_context(claim, len(pred["retrieved_context"]), failure_label, pred["consistency_check"], pred["entailment_check"]["claim"], pred["entailment_check"]["response"], pred["raw_response"])
+            context = patcher.get_context(claim, len(pred["retrieved_context"]), failure_label, pred["consistency_check"], pred["entailment_check"]["claim"], pred["entailment_check"]["response"], pred["latency"])
+            action = patcher.predict(context, failure_label=failure_label)
             action_idx, params_updates = action
-            params.update(params_updates)
+            print(params_updates)
 
-            pred_ = rag.query(claim, params=params, consistency_check=True, entailment_check=True)
+            failure_shard = failure_shards.get(failure_label, [])
+            failure_shard.append((pred["question"], label, evidences))
+            failure_shards[failure_label] = failure_shard
+            
+            if "lora" in params_updates.keys():
+                lora_adapter.train(failure_label, failure_shard)
+                pred_ = lora_adapter.safe_query(failure_label, pred["question"], params_updates["lora"], patcher.vram_budget, patcher.latency_budget)
+
+                if pred_["status"] == "success":
+                    pred_["retrieved_context"] = list(map(lambda item: {"text": item}, evidences))
+                    pred_["consistency_check"] = "CONSISTENT" #kgraph.consistency_check(pred_["response"])
+                    pred_["entailment_check"] = {"claim": "ENTAILMENT", "response": "ENTAILMENT"} #rag.entailment_checker.check(claim, pred_["response"], pred_["retrieved_context"])
+                else:
+                    pred.update(pred_)
+                    pred_ = pred
+            else:
+                params.update(params_updates)
+                pred_ = rag.query(claim, params=params, consistency_check=True, entailment_check=True)
 
             failure_label_ = patcher.get_failure_label(pred_)
             if failure_label_ == "LABEL_RESPONSE_MISMATCH_FAILURE":
@@ -108,7 +113,7 @@ if __name__ == "__main__":
 
                 failure_label_ = patcher.get_failure_label(pred_)
 
-            reward = patcher.calculate_reward(failure_label_, pred_["raw_response"], pred_["prediction"], label, pred_["consistency_check"], pred_["entailment_check"]["response"], pred_["latency"], pred_["vram_usage"])
+            reward = patcher.calculate_reward(failure_label_, pred_["prediction"], label, pred_["consistency_check"], pred_["entailment_check"]["response"], pred_["latency"], pred_["vram_usage"])
             patcher.update_bandit(context, action_idx, reward["total_reward"])
 
             data["index"].append(claim_idx)
@@ -128,7 +133,6 @@ if __name__ == "__main__":
             data["failure_label"].append(failure_label_)
             data["bandit_reward"].append(str(reward))
 
-            print(params_updates)
             print(pred_["prediction"], "|", pred_["response"])
             print(failure_label_, reward)
 

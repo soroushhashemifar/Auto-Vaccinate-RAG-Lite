@@ -79,7 +79,7 @@ class BanditPatcher:
         
         return failure_label
 
-    def get_context(self, claim, context_len, failure_label, consistency_check, claim_entailment_check, response_entailment_check, rag_response):
+    def get_context(self, claim, context_len, failure_label, consistency_check, claim_entailment_check, response_entailment_check, action_latency):
         claim_embedding = self.embedding_model.encode(claim)
         claim_embedding = torch.avg_pool1d(torch.from_numpy(claim_embedding[None, ...]), 8)[0].numpy().tolist()
         
@@ -88,15 +88,17 @@ class BanditPatcher:
         claim_entailment_vector = self.entailment_map[claim_entailment_check] 
         response_entailment_vector = self.entailment_map[response_entailment_check] 
 
-        metrics_vector = [
-            self.evaluator_faithfulness.evaluate_response(response=rag_response).score,
+        vram_available, vram_total = torch.cuda.mem_get_info()
+        budget_vector = [
+            max(0., (self.vram_budget - (vram_total - vram_available) / 1048576) / 1e5),
+            max(0., (self.latency_budget - action_latency) / 1e4)
         ]
 
-        context_vector = np.array([context_len] + claim_embedding + failure_onehot + consistency_vector + claim_entailment_vector + response_entailment_vector + metrics_vector)
+        context_vector = np.array([context_len] + claim_embedding + failure_onehot + consistency_vector + claim_entailment_vector + response_entailment_vector + budget_vector)
 
         return context_vector
 
-    def calculate_reward(self, failure_label, rag_response, rag_label, gt_label, consistency_check, entailment_check, action_latency, action_vram_usage):
+    def calculate_reward(self, failure_label, rag_label, gt_label, consistency_check, entailment_check, action_latency, action_vram_usage):
         if failure_label == "NO_FAILURE":
             failure_reward = 1.
         else:
@@ -194,10 +196,10 @@ class BanditPatcher:
         self.bandit.update(action, context, reward)
 
     def save_bandit(self):
-        cloudpickle.dump(self.bandit, open(f"out/{self.method}_patcher_{self.latency_budget}_{self.vram_budget}.pkl", "wb"))
+        cloudpickle.dump(self.bandit, open(f"out/{self.method}_patcher.pkl", "wb"))
 
     def load_bandit(self):
-        self.bandit = cloudpickle.load(open(f"out/{self.method}_patcher_{self.latency_budget}_{self.vram_budget}.pkl", "rb"))
+        self.bandit = cloudpickle.load(open(f"out/{self.method}_patcher.pkl", "rb"))
 
     def init_cfg(self):
         self.failure_map = {
@@ -220,7 +222,7 @@ class BanditPatcher:
             "NEUTRAL": [0, 0, 1],
         }
 
-        self.context_dim = len(self.failure_map["NO_FAILURE"]) + len(self.consistency_map["CONSISTENT"]) + 2 * len(self.entailment_map["ENTAILMENT"]) + 2 + 48
+        self.context_dim = len(self.failure_map["NO_FAILURE"]) + len(self.consistency_map["CONSISTENT"]) + 2 * len(self.entailment_map["ENTAILMENT"]) + 3 + 48
         
         self.evaluator_faithfulness = FaithfulnessEvaluator(llm=Settings.llm)
         self.embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -241,23 +243,27 @@ class BanditPatcherGR(BanditPatcher):
         idx = 0
         self.possible_actions_retrieval = []
         for retriever_type in ["dense", "bm25"]:
-            for topk in [5, 20]:
+            for topk in [5, 10, 20]:
                 for reindex in [False, True]:
                     self.possible_actions_retrieval.append((idx, {"retriever": retriever_type, "topk": topk, "reindex": reindex}))
                     idx += 1
 
+        for lora in ["cpu", "cuda"]:
+            self.possible_actions_retrieval.append((idx, {"lora": lora}))
+            idx += 1
+
         idx = 0
         self.possible_actions_generation = []
-        # for reranker in [False, True]:
-        #     for prompt_edit in [False, "WP", "WR"]:
-        #         self.possible_actions_generation.append((idx, {"reranker": reranker, "prompt_edit": prompt_edit}))
-        #         idx += 1
         for reranker in [True]:
             self.possible_actions_generation.append((idx, {"reranker": reranker}))
             idx += 1
 
         for prompt_edit in ["WP", "WR"]:
             self.possible_actions_generation.append((idx, {"prompt_edit": prompt_edit}))
+            idx += 1
+
+        for lora in ["cpu", "cuda"]:
+            self.possible_actions_generation.append((idx, {"lora": lora}))
             idx += 1
 
         if method == "linucb":
@@ -308,9 +314,9 @@ class BanditPatcherGR(BanditPatcher):
             self.bandit_retrieval.update(action, context, reward)
         
     def save_bandit(self):
-        cloudpickle.dump(self.bandit_retrieval, open(f"out/{self.method}_retrieval_patcher_{self.latency_budget}_{self.vram_budget}.pkl", "wb"))
-        cloudpickle.dump(self.bandit_generation, open(f"out/{self.method}_generation_patcher_{self.latency_budget}_{self.vram_budget}.pkl", "wb"))
+        cloudpickle.dump(self.bandit_retrieval, open(f"out/{self.method}_retrieval_patcher.pkl", "wb"))
+        cloudpickle.dump(self.bandit_generation, open(f"out/{self.method}_generation_patcher.pkl", "wb"))
 
     def load_bandit(self):
-        self.bandit_retrieval = cloudpickle.load(open(f"out/{self.method}_retrieval_patcher_{self.latency_budget}_{self.vram_budget}.pkl", "rb"))
-        self.bandit_generation = cloudpickle.load(open(f"out/{self.method}_generation_patcher_{self.latency_budget}_{self.vram_budget}.pkl", "rb"))
+        self.bandit_retrieval = cloudpickle.load(open(f"out/{self.method}_retrieval_patcher.pkl", "rb"))
+        self.bandit_generation = cloudpickle.load(open(f"out/{self.method}_generation_patcher.pkl", "rb"))

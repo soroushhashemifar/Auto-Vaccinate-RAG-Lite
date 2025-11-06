@@ -13,3 +13,4 @@ langchain-huggingface
 bitsandbytes
 cloudpickle
 peft
+unsloth

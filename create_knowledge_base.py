@@ -56,7 +56,7 @@ class WikipagesKnowledgeBase:
                     continue
 
                 # Add the document
-                documents.append((utils.normalize(doc['id']), doc['text']))
+                documents.append((utils.normalize(doc['id']), doc['text'], doc['lines']))
 
         return documents
 
@@ -102,6 +102,7 @@ class WikipagesKnowledgeBase:
 
         knowledge_base = []
         meta_data = []
+        sentences = []
         for evidence in filtered_evidences:
             # sentences = re.split(r'\n\d+\t', "\n" + evidence[1])
             # sentences = [preprocess(sentence) for sentence in sentences]
@@ -111,22 +112,24 @@ class WikipagesKnowledgeBase:
 
             knowledge_base.append(text)
             meta_data.append({"doc_id": evidence[0]})
+            sentences.append(re.split(r'\n\d+\t', "\n" + evidence[2]))
             # for idx, sentence in enumerate(sentences):
             #     meta_data.append({"doc_id": evidence[0], "sentence_id": idx})
 
         print("knowledge_base size:", len(knowledge_base))
 
-        return knowledge_base, meta_data
+        return knowledge_base, meta_data, sentences
 
     def build(self, fever_json_path, wikipages_dir_path, target_read_slices, claim_cutoff=-1, filepath='out/wikipages_knowledge_base.pkl'):
         inverse_evidence_map = self.create_inverse_evidence_map(fever_json_path, claim_cutoff=claim_cutoff)
-        knowledge_base, meta_data = self.create_knowledge_base(wikipages_dir_path, inverse_evidence_map, target_read_slices)
+        knowledge_base, meta_data, sentences = self.create_knowledge_base(wikipages_dir_path, inverse_evidence_map, target_read_slices)
 
         print(knowledge_base[0])
         print(meta_data[0])
+        print(sentences[0])
 
         with open(filepath, 'wb') as f:
-            pickle.dump({"knowledge_base": knowledge_base, "meta_data": meta_data}, f)
+            pickle.dump({"knowledge_base": knowledge_base, "meta_data": meta_data, "sentences": sentences}, f)
 
 
 if __name__ == "__main__":

@@ -10,6 +10,7 @@ class EntailmentChecker:
 
     def check(self, claim, rag_response, retrieved_context):
         rag_entailment_label = "NEUTRAL"
+        claim_entailment_label = "ENTAILMENT"
         for item in retrieved_context:
             text_input = item['text']
 

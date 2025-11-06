@@ -1,4 +1,5 @@
 import os
+import pickle
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.llms.huggingface import HuggingFaceLLM
 from llama_index.core import Settings
@@ -30,7 +31,7 @@ def setup_settings():
         context_window=8192,
         is_chat_model=True,
         generate_kwargs={"do_sample": False},
-        # model_kwargs={"load_in_4bit": True},
+        # model_kwargs={"load_in_4bit": True, "dtype": torch.bfloat16},
         model_kwargs={"dtype": torch.bfloat16},
         max_new_tokens=256,
     )
@@ -68,6 +69,31 @@ def load_fever(fever_json_path):
         for json_str in tqdm.tqdm(json_list):
             result = json.loads(json_str)
             fever_dataset.append((result['claim'], result['label'].replace(' ', '')))
+
+    print("fever_dataset size:", len(fever_dataset))
+
+    return fever_dataset
+
+def load_fever_with_evidence(fever_json_path, knowledge_base_pkl_path, cutoff=-1):
+    with open(knowledge_base_pkl_path, 'rb') as f:
+        content = pickle.load(f)
+        meta_data = content["meta_data"]
+        evidences = content["sentences"]
+        evidence_dict = {j["doc_id"]:i for i, j in zip(evidences, meta_data)}
+
+    with open(fever_json_path, 'r') as json_file:
+        json_list = list(json_file)[:cutoff]
+
+        fever_dataset = []
+        for json_str in tqdm.tqdm(json_list):
+            result = json.loads(json_str)
+            evidence_sentences = []
+            for evidence in result['evidence']: 
+                if evidence[0][2] is not None: 
+                    evidence_sentences.append(evidence_dict[evidence[0][2]][1:][evidence[0][3]].replace("\t", " "))
+            
+            evidence_sentences = list(set(evidence_sentences))
+            fever_dataset.append((result['claim'], result['label'].replace(' ', ''), evidence_sentences))
 
     print("fever_dataset size:", len(fever_dataset))
 
