@@ -77,7 +77,7 @@ class LinUCB(ContextualBanditAlgorithm):
         self.A = [np.identity(n_features) for _ in range(n_arms)]
         self.b = [np.zeros((n_features, 1)) for _ in range(n_arms)]
 
-    def select_arm(self, context: np.ndarray) -> int:
+    def select_arm(self, context: np.ndarray, armset) -> int:
         """
         Select an arm using the LinUCB algorithm.
 
@@ -88,8 +88,11 @@ class LinUCB(ContextualBanditAlgorithm):
             int: The index of the selected arm.
         """
         context = context.reshape(-1, 1)
-        p = np.zeros(self.n_arms)
+        p = np.zeros(self.n_arms) - np.inf
         for arm in range(self.n_arms):
+            if arm not in armset:
+                continue
+
             A_inv = np.linalg.inv(self.A[arm])
             theta = A_inv @ self.b[arm]
             p[arm] = (
@@ -239,10 +242,11 @@ class ThompsonSampling(ContextualBanditAlgorithm):
             n_arms (int): Number of arms.
         """
         super().__init__(n_arms)
+        self.n_arms = n_arms
         self.alpha = np.ones(n_arms)
         self.beta = np.ones(n_arms)
 
-    def select_arm(self, context: np.ndarray = None) -> int:
+    def select_arm(self, context: np.ndarray = None, armset=None) -> int:
         """
         Select an arm using Thompson Sampling.
 
@@ -253,6 +257,11 @@ class ThompsonSampling(ContextualBanditAlgorithm):
             int: The index of the selected arm.
         """
         samples = np.random.beta(self.alpha, self.beta)
+
+        for arm in range(self.n_arms):
+            if arm not in armset:
+                samples[arm] = -np.inf
+            
         return int(np.argmax(samples))
 
     def update(self, arm: int, context: np.ndarray = None, reward: float = None):

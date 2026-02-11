@@ -1,18 +1,18 @@
+import json
 from llama_index.core import KnowledgeGraphIndex, load_index_from_storage
 from llama_index.core.graph_stores import SimpleGraphStore
 from llama_index.core import StorageContext
-import re
 from llama_index.core import Document
 import os
 import tqdm
 from pyvis.network import Network
 from triplet_extractor import TripletExtractor
 from llama_index.core import PromptTemplate
-import pickle
-# from create_knowledge_base import WikipagesKnowledgeBase
+from sentence_transformers import SentenceTransformer
+import numpy as np
 
 
-class WikiMoviesKnowledgeGraph:
+class KnowledgeGraph:
 
     """
         reference: https://github.com/run-llama/llama_index/issues/13129
@@ -21,80 +21,27 @@ class WikiMoviesKnowledgeGraph:
         reference: https://developers.llamaindex.ai/python/examples/index_structs/knowledge_graph/knowledge_graph2/
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, output_path, **kwargs):
+        self.output_path = output_path
         self.kwargs = kwargs
         self.triplet_extractor = TripletExtractor(**kwargs)
+        self.embedding_model = SentenceTransformer("sentence-transformers/all-mpnet-base-v2")
 
-    def load_wikimovies_triplets(self, wikimovies_dir_path, cutoff):
-        with open(os.path.join(wikimovies_dir_path, "knowledge_source/full/full_kb.txt")) as f:
-            documents = []
-            for line in f:
-                parts = re.findall(r'(\d+)\s([\w\s\d]+)\s(\w+\_\w+)\s([\w\s\d,;:\.\!\?\-\_]+)', line.strip())
-                if len(parts) > 0:
-                    subj, rel, obj = parts[0][1:]
-                    document = Document(text=f"{subj} {rel.replace('_', ' ')} {obj}", metadata={"subject": subj, "relationship": rel, "object": obj})
-                    documents.append(document)
-
-                    if cutoff > -1 and len(documents) == cutoff:
-                        break
-
-        return documents
-
-    def create_wikimovies_triplets(self, wikimovies_dir_path, cutoff):
-        with open(os.path.join(wikimovies_dir_path, "questions/full/full_qa_dev.txt"), "r") as file:
-            content = file.readlines()
-
+    def create_KB_documents(self, knowledgebase):
         documents = []
-        for line in tqdm.tqdm(content):
-            parts = re.findall(r'\d+\s([\w\s\d]+\?)[\s\t]+([\w\s\d,;:\.\!\?\-\_]+)', line.strip())
-            if len(parts) > 0:
-                text = " ".join(parts[0])
-                document = Document(text=text, metadata={"question": parts[0][0], "answer": parts[0][1]})
-                documents.append(document)
-
-                if cutoff > -1 and len(documents) == cutoff:
-                    break
-
-        return documents
-
-    def load_KB_documents(self, knowledge_base_pkl_path, cutoff):
-        with open(knowledge_base_pkl_path, 'rb') as f:
-            content = pickle.load(f)
-            knowledge_base = content["knowledge_base"]
-            meta_data = content["meta_data"]
-
-        documents = []
-        for text, mdata in zip(knowledge_base, meta_data):
-            # for sentence in text.split(" . "):
-            #     document = Document(text=sentence + ".", extra_info={"doc_id": evidence[0]})
-            #     documents.append(document)
-
-            #     if cutoff > -1 and len(documents) == cutoff:
-            #         break
-
-            document = Document(text=text, extra_info=mdata)
+        for text in knowledgebase:
+            document = Document(text=text, extra_info={})
             documents.append(document)
-            
-            if cutoff > -1 and len(documents) == cutoff:
-                break
 
         return documents
     
-    def manual_check_triplets(self, wikimovies_dir_path, knowledge_base_pkl_path, cutoff=-1):
-        triplet_documents = []
+    def manual_check_triplets(self, knowledgebase):
+        documents = self.create_KB_documents(knowledgebase)
+        print("kb_documents size:", len(documents))
+        print(documents[0])
 
-        # wm_documents = self.create_wikimovies_triplets(wikimovies_dir_path, cutoff)
-        # triplet_documents.extend(wm_documents)
-        # print("triplet_documents size:", len(triplet_documents))
-        # print(triplet_documents[0])
-
-        kb_documents = self.load_KB_documents(knowledge_base_pkl_path, cutoff)
-        triplet_documents.extend(kb_documents)
-        print("kb_documents size:", len(kb_documents))
-        print(kb_documents[0])
-
-        with open("out/KB_triplets.txt", "w+") as file:
-            for document in tqdm.tqdm(triplet_documents):
+        with open(f"{self.output_path}/KB_triplets.txt", "w+") as file:
+            for document in tqdm.tqdm(documents):
                 text = document.text
                 triplets = self.triplet_extractor.extract_triplets(text)
                 for triplet in triplets:
@@ -107,67 +54,86 @@ class WikiMoviesKnowledgeGraph:
 
         self.index = KnowledgeGraphIndex.from_documents(
             triplet_documents,
-            max_triplets_per_chunk=5,
+            max_triplets_per_chunk=10,
             include_embeddings=True,
-            kg_triplet_extract_fn=self.triplet_extractor.extract_triplets, #self.extract_triplets,
+            kg_triplet_extract_fn=self.triplet_extractor.extract_triplets,
             storage_context=storage_context,
             show_progress=True,
         )
-        self.index.storage_context.persist(persist_dir=self.kwargs["kg_storage_dir"])
+        self.index.storage_context.persist(persist_dir=os.path.join(self.output_path, self.kwargs["kg_storage_dir"]))
 
-    def build(self, wikimovies_dir_path, knowledge_base_pkl_path, cutoff=-1):
-        if os.path.exists(os.path.join(self.kwargs["kg_storage_dir"], 'index_store.json')):
+    def build(self, knowledgebase):
+        if os.path.exists(os.path.join(self.output_path, self.kwargs["kg_storage_dir"], 'index_store.json')):
             print("[MSG] Loading knowledge graph...")
 
-            graph_store = SimpleGraphStore.from_persist_dir(self.kwargs["kg_storage_dir"])
-            storage_context = StorageContext.from_defaults(graph_store=graph_store, persist_dir=self.kwargs["kg_storage_dir"])
+            graph_store = SimpleGraphStore.from_persist_dir(os.path.join(self.output_path, self.kwargs["kg_storage_dir"]))
+            storage_context = StorageContext.from_defaults(graph_store=graph_store, persist_dir=os.path.join(self.output_path, self.kwargs["kg_storage_dir"]))
             self.index = load_index_from_storage(storage_context)
         else:
             print("[MSG] Building knowledge graph...")
 
-            triplet_documents = []
+            documents = self.create_KB_documents(knowledgebase)
+            print("kb_documents size:", len(documents))
+            print(documents[0])
 
-            # wm_documents = self.create_wikimovies_triplets(wikimovies_dir_path, cutoff)
-            # triplet_documents.extend(wm_documents)
-            # print("triplet_documents size:", len(triplet_documents))
-            # print(triplet_documents[0])
+            self.index_nodes(documents)
 
-            kb_documents = self.load_KB_documents(knowledge_base_pkl_path, cutoff)
-            triplet_documents.extend(kb_documents)
-            print("kb_documents size:", len(kb_documents))
-            print(kb_documents[0])
-
-            self.index_nodes(triplet_documents)
-
-        self.query_engine = self.index.as_query_engine(
-            text_qa_template=PromptTemplate(self.kwargs["KG_completion_prompt"]),
-        )
-        self.retriever_engine = self.index.as_retriever(include_text=True, similarity_top_k=self.kwargs["similarity_top_k"])
+        # prompt = self.kwargs["prompts"]["kg_consistency"]
+        # self.query_engine = self.index.as_query_engine(
+        #     text_qa_template=PromptTemplate(prompt),
+        # )
+        self.retriever_engine = self.index.as_retriever(include_text=False, similarity_top_k=self.kwargs["similarity_top_k"])
         print("[MSG] Knowledge graph is ready to go.")
+
+    def encode_triplet_elements(self, triplet):
+        embs = self.embedding_model.encode(triplet, convert_to_numpy=True, normalize_embeddings=True)
+        s_emb, r_emb, o_emb = embs[0], embs[1], embs[2]
+
+        return s_emb, r_emb, o_emb
+
+    def check_triplet(self, q_s, q_r, q_o, db_s, db_r, db_o):
+        # cosine computed as dot because embeddings normalized
+
+        s_score = float(np.dot(q_s, db_s))
+        r_score = float(np.dot(q_r, db_r))
+        o_score = float(np.dot(q_o, db_o))
+
+        if s_score < self.kwargs["kg_thresholds"]["subject_score"]: 
+            return "MISSING"
+        elif r_score < self.kwargs["kg_thresholds"]["relation_score"]:
+            return "MISSING"
+        elif o_score < self.kwargs["kg_thresholds"]["object_score"]:
+            return "CONFLICT"
+        
+        return "CONSISTENT"
 
     def consistency_check(self, input_text):
         consistency_checks = []
         if len(input_text) > 0:
+            # print("input_text:", input_text)
             triplets = self.triplet_extractor.extract_triplets(input_text)
             for sub, rel, obj in triplets:
-                response_obj = self.query_engine.query(f"""[subject:{sub}] - [predicate:{rel}] - [object:{obj}]""")
-                prediction = response_obj.response.strip()
-
-                context = " ".join([node.dict()['node']['text'] for node in response_obj.source_nodes]).lower()
-                if sub.lower() not in context or obj.lower() not in context:
-                    prediction = "MISSING"
-
-                if "conflict" in prediction.lower():
-                    prediction = "CONFLICT"
-                elif "consistent" in prediction.lower():
+                # print(f"{sub}, {rel}, {obj}")
+                response_obj = self.retriever_engine.retrieve(f"""[subject:{sub}] - [predicate:{rel}] - [object:{obj}]""")
+                ret_triplet_list = [eval(triplet) for resp in response_obj for triplet in resp.metadata["kg_rel_texts"]]
+                # print("ret_triplet_list:", ret_triplet_list)
+                ret_triplet_embed_list = map(self.encode_triplet_elements, ret_triplet_list)
+                q_s, q_r, q_o = self.encode_triplet_elements((sub, rel, obj))
+                status = [self.check_triplet(q_s, q_r, q_o, ds, dr, do) for ds, dr, do in ret_triplet_embed_list]
+                # print("status:", status)
+                if "CONSISTENT" in status:
                     prediction = "CONSISTENT"
-
+                elif "CONFLICT" in status:
+                    prediction = "CONFLICT"
+                elif "MISSING" in status:
+                    prediction = "MISSING"
+                
                 consistency_checks.append(prediction)
 
-        if "MISSING" in consistency_checks:
-            return "MISSING"
-        elif "CONFLICT" in consistency_checks:
+        if "CONFLICT" in consistency_checks:
             return "CONFLICT"
+        elif "MISSING" in consistency_checks:
+            return "MISSING"
         elif len(input_text) == 0:
             return "EMPTYINPUT"
         elif len(consistency_checks) == 0:
@@ -179,4 +145,4 @@ class WikiMoviesKnowledgeGraph:
         g = self.index.get_networkx_graph()
         net = Network(notebook=True, cdn_resources="in_line", directed=True)
         net.from_nx(g)
-        net.show('out/knowledge_gragh_plot.html')
+        net.show(f'{self.output_path}/knowledge_gragh_plot.html')

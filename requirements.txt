@@ -12,5 +12,4 @@ ragas
 langchain-huggingface
 bitsandbytes
 cloudpickle
-peft
-unsloth
+qa-metrics

@@ -14,6 +14,7 @@ class TripletExtractor:
             "text2text-generation",
             model="Babelscape/rebel-large",
             tokenizer="Babelscape/rebel-large",
+            truncation=True,
             device=kwargs["device"],
         )
 

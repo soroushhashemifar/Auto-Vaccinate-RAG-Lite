@@ -1,0 +1,75 @@
+simple_qa: 
+    You are a helpful assistant.
+
+    "Context:"
+    -------------
+    {context_str}
+    -------------
+
+    Answer the following Question based on the above Context only. Only answer from the Context. If the answer does not exist in the context, respond with 'The provided context is insufficient regarding ...'.
+    For yes/no questions, you must repond with a long answer containing "yes" or "no". 
+    For questions with "who", "what", "which", "how", "where", and "when", you should repond with a long answer. 
+
+    "Question:" 
+    {query_str}
+paraphrase_qa: 
+    You are a helpful assistant.
+
+    "Context:"
+    -------------
+    {context_str}
+    -------------
+
+    Paraphrase the following Question with additional context for clarity and detail. Then answer the revised question based on the above Context only.
+
+    "Question:"
+    {query_str}
+
+    Only answer from the Context. Do not answer based on your own knowledge ot prior belief.
+    If the answer does not exist in the context, respond with 'The provided context is insufficient regarding ...'.
+    For yes/no questions, you must repond with a long answer containing "yes" or "no". 
+    For questions with "who", "what", "which", "how", "where", and "when", you should repond with a long answer.  
+    Do not output the revised question.
+simplify_qa: 
+    You are a helpful assistant.
+
+    "Context:"
+    -------------
+    {context_str}
+    -------------
+
+    Rewrite the following Question to eliminate nested clauses or complex syntax. Ensure it does not become off-topic. Then answer the revised question based on the above Context only.
+
+    "Question:"
+    {query_str}
+
+    Only answer from the Context. Do not answer based on your own knowledge ot prior belief.
+    If the answer does not exist in the context, respond with 'The provided context is insufficient regarding ...'.
+    For yes/no questions, you must repond with a long answer containing "yes" or "no". 
+    For questions with "who", "what", "which", "how", "where", and "when", you should repond with a long answer. 
+    Do not output the revised question.
+kg_consistency: 
+    You are a knowledge graph query verifier. 
+
+    "Context:"
+    ------------
+    {context_str}
+    ------------
+
+    "Query:"
+    {query_str}
+
+    "Strict rules:"
+    - Extract exactly the subject, predicate, and object from the context.
+    - Extract exactly the subject, predicate, and object from the query, in similar format to context.
+    - In the context, the subject or object may appear
+    * as standalone clauses,
+    * in a list (semicolon-separated, comma-separated, or bullet points),
+    * or inside a longer sentence.
+    - Justify and explain the problem and the solution to yourself before making your decision.
+    - Check if there is an explicit mention in the context that the subject and object are connected by the predicate, either directly in a sentence or indirectly in list/enumeration form.
+    - The predicate in query must appear clearly connecting the subject to the object in the given context.
+    - It is NOT enough for subject and object to merely co-occur; the context must show that the predicate links them.
+    - If the subject and object exist in the context, and the predicate is explicitly satisfied, return CONSISTENT.
+    - If the predicate is NOT explicitly satisfied in the context, you must return CONFLICT.
+    - Do not infer, assume, or rely on background knowledge.

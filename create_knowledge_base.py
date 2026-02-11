@@ -4,6 +4,7 @@ import re
 import pickle
 import os
 from drqa.retriever import utils
+import sys
 
 
 class WikipagesKnowledgeBase:
@@ -109,10 +110,13 @@ class WikipagesKnowledgeBase:
             # sentences = list(filter(lambda sentence: len(sentence) > 0, sentences))
 
             text = self.preprocess(evidence[1])
-
             knowledge_base.append(text)
+            
             meta_data.append({"doc_id": evidence[0]})
-            sentences.append(re.split(r'\n\d+\t', "\n" + evidence[2]))
+
+            text = self.convert_brc(evidence[2])
+            text = text.strip()
+            sentences.append(re.split(r'\n\d+\t', "\n" + text))
             # for idx, sentence in enumerate(sentences):
             #     meta_data.append({"doc_id": evidence[0], "sentence_id": idx})
 
@@ -120,7 +124,7 @@ class WikipagesKnowledgeBase:
 
         return knowledge_base, meta_data, sentences
 
-    def build(self, fever_json_path, wikipages_dir_path, target_read_slices, claim_cutoff=-1, filepath='out/wikipages_knowledge_base.pkl'):
+    def build(self, fever_json_path, wikipages_dir_path, target_read_slices, filepath, claim_cutoff=-1):
         inverse_evidence_map = self.create_inverse_evidence_map(fever_json_path, claim_cutoff=claim_cutoff)
         knowledge_base, meta_data, sentences = self.create_knowledge_base(wikipages_dir_path, inverse_evidence_map, target_read_slices)
 
@@ -133,6 +137,7 @@ class WikipagesKnowledgeBase:
 
 
 if __name__ == "__main__":
-    wkb = WikipagesKnowledgeBase()
-    wkb.build("./shared_task_dev.jsonl", "./wiki-pages", -1, 500)
-    # wkb.build("./shared_task_dev.jsonl", "./wiki-pages", -1)
+    if sys.argv[1] == "fever":
+        wkb = WikipagesKnowledgeBase()
+        wkb.build("./shared_task_dev.jsonl", "./wiki-pages", -1, filepath='files_fever_v/knowledge_base.pkl', claim_cutoff=2000)
+        # wkb.build("./shared_task_dev.jsonl", "./wiki-pages", -1)

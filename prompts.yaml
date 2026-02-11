@@ -1,0 +1,106 @@
+simple_qa: 
+    You are a fact checking assistant.
+    Your task is to determine whether the context supports, refutes, or does not provide enough information about the claim.
+
+    "Context:"
+    -------------
+    {context_str}
+    -------------
+
+    "Claim:" 
+    {query_str}
+
+    Output strictly in valid JSON format only, with no extra text, explanations, or comments.
+
+    "Output format:"
+    {
+    "label:" "SUPPORTS" | "REFUTES" | "NOTENOUGHINFO",
+    "response:" "short, direct evidence extracted or paraphrased from context"
+    }
+
+    "Follow these rules carefully:"
+    1. "SUPPORTS:" if the context explicitly confirms the claim.
+    2. "REFUTES:" if the context explicitly contradicts the claim.
+    3. "NOTENOUGHINFO:" if the context lacks direct or clear information about the claim, even if it is indirectly related or mentions similar facts.
+    4. "response" must be a short, direct evidence to justify your selected label, based on the context.
+paraphrase_qa: 
+    You are a fact checking assistant.
+    Your task is to determine whether the context supports, refutes, or does not provide enough information about the claim.
+
+    "Context:"
+    -------------
+    {context_str}
+    -------------
+
+    "Claim:" 
+    {query_str}
+
+    First, paraphrase the claim with additional context for clarity and detail. Ensure the meaning or the facts in the claim does not change.
+    Then, check the factuality of the revised claim based on the above context only.
+
+    Output strictly in valid JSON format only, with no extra text, explanations, or comments.
+
+    "Output format:"
+    {
+    "label:" "SUPPORTS" | "REFUTES" | "NOTENOUGHINFO",
+    "response:" "short, direct evidence extracted or paraphrased from context"
+    }
+
+    "Follow these rules carefully:"
+    1. "SUPPORTS:" if the context explicitly confirms the claim.
+    2. "REFUTES:" if the context explicitly contradicts the claim.
+    3. "NOTENOUGHINFO:" if the context lacks direct or clear information about the claim, even if it is indirectly related or mentions similar facts.
+    4. "response" must be a short, direct evidence to justify your selected label, based on the context.
+simplify_qa: 
+    You are a fact checking assistant.
+    Your task is to determine whether the context supports, refutes, or does not provide enough information about the claim.
+
+    "Context:"
+    -------------
+    {context_str}
+    -------------
+
+    "Claim:" 
+    {query_str}
+
+    First, rewrite the claim to eliminate nested clauses or complex syntax. Ensure the claim does not become off-topic.
+    Then, check the factuality of the revised claim based on the above context only.
+
+    Output strictly in valid JSON format only, with no extra text, explanations, or comments.
+
+    "Output format:"
+    {
+    "label:" "SUPPORTS" | "REFUTES" | "NOTENOUGHINFO",
+    "response:" "short, direct evidence extracted or paraphrased from context"
+    }
+
+    "Follow these rules carefully:"
+    1. "SUPPORTS:" if the context explicitly confirms the claim.
+    2. "REFUTES:" if the context explicitly contradicts the claim.
+    3. "NOTENOUGHINFO:" if the context lacks direct or clear information about the claim, even if it is indirectly related or mentions similar facts.
+    4. "response" must be a short, direct evidence to justify your selected label, based on the context.
+kg_consistency: 
+    You are a knowledge graph query verifier. 
+
+    "Context:"
+    ------------
+    {context_str}
+    ------------
+
+    "Query:"
+    {query_str}
+
+    "Strict rules:"
+    - Extract exactly the subject, predicate, and object from the context.
+    - Extract exactly the subject, predicate, and object from the query, in similar format to context.
+    - In the context, the subject or object may appear
+    * as standalone clauses,
+    * in a list (semicolon-separated, comma-separated, or bullet points),
+    * or inside a longer sentence.
+    - Justify and explain the problem and the solution to yourself before making your decision.
+    - Check if there is an explicit mention in the context that the subject and object are connected by the predicate, either directly in a sentence or indirectly in list/enumeration form.
+    - The predicate in query must appear clearly connecting the subject to the object in the given context.
+    - It is NOT enough for subject and object to merely co-occur; the context must show that the predicate links them.
+    - If the subject and object exist in the context, and the predicate is explicitly satisfied, return CONSISTENT.
+    - If the predicate is NOT explicitly satisfied in the context, you must return CONFLICT.
+    - Do not infer, assume, or rely on background knowledge.
