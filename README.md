@@ -1,5 +1,7 @@
 # AutoVaccinate-RAG-Lite
 
+![AutoVaccinate-RAG-Lite](figures/arch.png)
+
 **AutoVaccinate-RAG-Lite** is an adaptive, budget-aware framework designed to diagnose and repair factual failures in Retrieval-Augmented Generation (RAG) pipelines. By utilizing a contextual bandit policy (LinUCB/Thompson Sampling), the system dynamically selects the most effective patch (ranging from retrieval adjustments to query reformulations) based on real-time diagnostic signals.
 
 ---
