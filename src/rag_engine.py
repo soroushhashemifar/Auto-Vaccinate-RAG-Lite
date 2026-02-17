@@ -8,20 +8,17 @@ from llama_index.core.query_engine import RetrieverQueryEngine
 from llama_index.core.retrievers import VectorIndexRetriever
 from llama_index.core.postprocessor import SimilarityPostprocessor
 from llama_index.core import PromptTemplate
-import pickle
 import faiss
 import json
-from triplet_extractor import TripletExtractor
 import os
 from json_repair import repair_json
-from entailment import EntailmentChecker
 from llama_index.retrievers.bm25 import BM25Retriever
 import Stemmer
 from llama_index.core.postprocessor import SentenceTransformerRerank
-# from transformers import AutoModelForCausalLM, AutoTokenizer
-from llama_index.core import Settings
-from llama_index.core.llms import ChatMessage
 import time
+
+from src.triplet_extractor import TripletExtractor
+from src.entailment import EntailmentChecker
 
 
 class RAGEngine:

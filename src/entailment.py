@@ -1,5 +1,6 @@
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
-from utils import singleton
+
+from src.utils import singleton
 
 
 @singleton

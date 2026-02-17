@@ -1,4 +1,3 @@
-import json
 from llama_index.core import KnowledgeGraphIndex, load_index_from_storage
 from llama_index.core.graph_stores import SimpleGraphStore
 from llama_index.core import StorageContext
@@ -6,10 +5,10 @@ from llama_index.core import Document
 import os
 import tqdm
 from pyvis.network import Network
-from triplet_extractor import TripletExtractor
-from llama_index.core import PromptTemplate
 from sentence_transformers import SentenceTransformer
 import numpy as np
+
+from src.triplet_extractor import TripletExtractor
 
 
 class KnowledgeGraph:
@@ -78,10 +77,6 @@ class KnowledgeGraph:
 
             self.index_nodes(documents)
 
-        # prompt = self.kwargs["prompts"]["kg_consistency"]
-        # self.query_engine = self.index.as_query_engine(
-        #     text_qa_template=PromptTemplate(prompt),
-        # )
         self.retriever_engine = self.index.as_retriever(include_text=False, similarity_top_k=self.kwargs["similarity_top_k"])
         print("[MSG] Knowledge graph is ready to go.")
 
@@ -110,17 +105,13 @@ class KnowledgeGraph:
     def consistency_check(self, input_text):
         consistency_checks = []
         if len(input_text) > 0:
-            # print("input_text:", input_text)
             triplets = self.triplet_extractor.extract_triplets(input_text)
             for sub, rel, obj in triplets:
-                # print(f"{sub}, {rel}, {obj}")
                 response_obj = self.retriever_engine.retrieve(f"""[subject:{sub}] - [predicate:{rel}] - [object:{obj}]""")
                 ret_triplet_list = [eval(triplet) for resp in response_obj for triplet in resp.metadata["kg_rel_texts"]]
-                # print("ret_triplet_list:", ret_triplet_list)
                 ret_triplet_embed_list = map(self.encode_triplet_elements, ret_triplet_list)
                 q_s, q_r, q_o = self.encode_triplet_elements((sub, rel, obj))
                 status = [self.check_triplet(q_s, q_r, q_o, ds, dr, do) for ds, dr, do in ret_triplet_embed_list]
-                # print("status:", status)
                 if "CONSISTENT" in status:
                     prediction = "CONSISTENT"
                 elif "CONFLICT" in status:

@@ -4,68 +4,71 @@ os.environ['JAX_PLATFORMS'] = 'cpu'
 
 import random
 import sys
-from knowledge_graph import KnowledgeGraph
-from utils import load_hotpotqa, setup_settings
-from rag_engine import RAGEngine
 import tqdm
-from patcher import BanditPatcher 
+
+from src.knowledge_graph import KnowledgeGraph
+from src.utils import load_fever, setup_settings
+from src.rag_engine import RAGEngine
+from src.patcher import BanditPatcher 
 
 
 if __name__ == "__main__":
     dataset_name = sys.argv[1]
-    assert dataset_name in ["hotpotqa", "hotpotqa_ts", "hotpotqa_nogate", "hotpotqa_nocost", "hotpotqa_tb", "hotpotqa_lb"]
-    if dataset_name == "hotpotqa":
+    assert dataset_name in ["fever", "fever_ts", "fever_nogate", "fever_nocost", "fever_tb", "fever_lb"]
+    if dataset_name == "fever":
         method = "linucb"
-        filepath = "files_hotpotqa_t"
-        dataset, knowledgebase = load_hotpotqa(split='train')
+        filepath = "files_fever_t"
+        dataset, knowledgebase = load_fever("files_fever_v", split='train')
         with_gating = True
         with_cost = True
         latency_budget = 3
         vram_budget = 6
         postfix = ""
-    elif dataset_name == "hotpotqa_ts":
-        dataset_name = "hotpotqa"
+    elif dataset_name == "fever_ts":
+        dataset_name = "fever"
         method = "thompsonsampling"
-        filepath = "files_hotpotqa_ts_t"
-        dataset, knowledgebase = load_hotpotqa(split='train')
+        filepath = "files_fever_ts_t"
+        dataset, knowledgebase = load_fever("files_fever_ts_v", split='train')
         with_gating = True
         with_cost = True
         latency_budget = 3
         vram_budget = 6
         postfix = ""
-    elif dataset_name == "hotpotqa_nogate":
-        dataset_name = "hotpotqa"
+    elif dataset_name == "fever_nogate":
+        dataset_name = "fever"
         method = "linucb"
-        filepath = "files_hotpotqa_t"
-        dataset, knowledgebase = load_hotpotqa(split='train')
+        filepath = "files_fever_t"
+        dataset, knowledgebase = load_fever("files_fever_v", split='train')
         with_gating = False
         with_cost = True
         latency_budget = 3
         vram_budget = 6
         postfix = "_nogate"
-    elif dataset_name == "hotpotqa_nocost":
-        dataset_name = "hotpotqa"
+    elif dataset_name == "fever_nocost":
+        dataset_name = "fever"
         method = "linucb"
-        filepath = "files_hotpotqa_t"
-        dataset, knowledgebase = load_hotpotqa(split='train')
+        filepath = "files_fever_t"
+        dataset, knowledgebase = load_fever("files_fever_v", split='train')
         with_gating = True
         with_cost = False
         latency_budget = 3
         vram_budget = 6
         postfix = "_nocost"
-    elif dataset_name == "hotpotqa_tb":
+    elif dataset_name == "fever_tb":
+        dataset_name = "fever"
         method = "linucb"
-        filepath = "files_hotpotqa_t"
-        dataset, knowledgebase = load_hotpotqa(split='train')
+        filepath = "files_fever_t"
+        dataset, knowledgebase = load_fever("files_fever_v", split='train')
         with_gating = True
         with_cost = True
         latency_budget = 0.7*3
         vram_budget = 0.7*6
         postfix = "_tb"
-    elif dataset_name == "hotpotqa_lb":
+    elif dataset_name == "fever_lb":
+        dataset_name = "fever"
         method = "linucb"
-        filepath = "files_hotpotqa_t"
-        dataset, knowledgebase = load_hotpotqa(split='train')
+        filepath = "files_fever_t"
+        dataset, knowledgebase = load_fever("files_fever_v", split='train')
         with_gating = True
         with_cost = True
         latency_budget = 1.5*3
@@ -90,9 +93,10 @@ if __name__ == "__main__":
             gt_context, question, gt_answer = tuple(row)
 
             params = {'retriever': 'dense', 'topk': 5, 'reranker': False, 'prompt_edit': "simple_qa", 'reindex': False}
-            response_obj = rag.query_shortanswer(question, params=params, consistency_check=True, entailment_check=True)
+            response_obj = rag.query(question, params=params, consistency_check=True, entailment_check=True)
 
-            failure_label, _ = patcher.get_failure_label(response_obj)
+            failure_label, new_label = patcher.get_failure_label(response_obj)
+            response_obj["label"] = new_label
             reward = patcher.calculate_reward(failure_label, response_obj["consistency_check"], response_obj["entailment_check"]["response"], response_obj["latency"], response_obj["vram_usage"])
 
             if failure_label != "NO_FAILURE":
@@ -100,14 +104,17 @@ if __name__ == "__main__":
                 print(failure_label)
 
                 context = patcher.get_context(question, failure_label, response_obj["consistency_check"], response_obj["entailment_check"]["query"], response_obj["entailment_check"]["response"], response_obj["latency"])
-                action = patcher.predict(context)
+                patchset = "retriever" if response_obj["label"] == "UNVERIFIED" else "all"
+                print("patchset:", patchset)
+                action = patcher.predict(context, patchset=patchset)
                 action_idx, params_updates = action
                 print(params_updates)
 
                 params.update(params_updates)
-                response_obj_patched = rag.query_shortanswer(question, params=params, consistency_check=True, entailment_check=True)
+                response_obj_patched = rag.query(question, params=params, consistency_check=True, entailment_check=True)
 
-                failure_label_patched, _ = patcher.get_failure_label(response_obj_patched)
+                failure_label_patched, new_label_patched = patcher.get_failure_label(response_obj_patched)
+                response_obj_patched["label"] = new_label_patched
                 print(gt_answer, response_obj_patched)
 
                 reward = patcher.calculate_reward(failure_label_patched, response_obj_patched["consistency_check"], response_obj_patched["entailment_check"]["response"], response_obj_patched["latency"], response_obj_patched["vram_usage"])

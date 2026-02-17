@@ -2,94 +2,42 @@ import os
 # prevent JAX from using gpu to avoid bm25s eat up the gpu memory
 os.environ['JAX_PLATFORMS'] = 'cpu'
 
+import random
+import copy
 import sys 
-from knowledge_graph import KnowledgeGraph
-from utils import context_precision, context_recall, load_fever, setup_settings
-from rag_engine import RAGEngine
 import tqdm
 from datasets import Dataset
-from patcher import BanditPatcher
 from qa_metrics.em import em_match
+
+from src.knowledge_graph import KnowledgeGraph
+from src.utils import context_precision, context_recall, load_fever, setup_settings
+from src.rag_engine import RAGEngine
+from src.patcher import BanditPatcher
 
 
 if __name__ == "__main__":
     dataset_name = sys.argv[1]
-    assert dataset_name in ["fever", "fever_ts", "fever_nogate", "fever_nocost", "fever_tb", "fever_lb"]
+    assert dataset_name in ["fever"]
     if dataset_name == "fever":
         method = "linucb"
         filepath = "files_fever_v"
         patcher_filepath = "files_fever_t"
         dataset, knowledgebase = load_fever(filepath, split='validation')
-        with_gating = True
-        with_cost = True
         latency_budget = 3
         vram_budget = 6
-        postfix = ""
-    elif dataset_name == "fever_ts":
-        dataset_name = "fever"
-        method = "thompsonsampling"
-        filepath = "files_fever_ts_v"
-        patcher_filepath = "files_fever_ts_t"
-        dataset, knowledgebase = load_fever(filepath, split='validation')
-        with_gating = True
-        with_cost = True
-        latency_budget = 3
-        vram_budget = 6
-        postfix = ""
-    elif dataset_name == "fever_nogate":
-        dataset_name = "fever"
-        method = "linucb"
-        filepath = "files_fever_v"
-        patcher_filepath = "files_fever_t"
-        dataset, knowledgebase = load_fever(filepath, split='validation')
-        with_gating = False
-        with_cost = True
-        latency_budget = 3
-        vram_budget = 6
-        postfix = "_nogate"
-    elif dataset_name == "fever_nocost":
-        dataset_name = "fever"
-        method = "linucb"
-        filepath = "files_fever_v"
-        patcher_filepath = "files_fever_t"
-        dataset, knowledgebase = load_fever(filepath, split='validation')
-        with_gating = True
-        with_cost = False
-        latency_budget = 3
-        vram_budget = 6
-        postfix = "_nocost"
-    elif dataset_name == "fever_tb":
-        dataset_name = "fever"
-        method = "linucb"
-        filepath = "files_fever_v"
-        patcher_filepath = "files_fever_t"
-        dataset, knowledgebase = load_fever(filepath, split='validation')
-        with_gating = True
-        with_cost = True
-        latency_budget = 0.7*3
-        vram_budget = 0.7*6
-        postfix = "_tb"
-    elif dataset_name == "fever_lb":
-        dataset_name = "fever"
-        method = "linucb"
-        filepath = "files_fever_v"
-        patcher_filepath = "files_fever_t"
-        dataset, knowledgebase = load_fever(filepath, split='validation')
-        with_gating = True
-        with_cost = True
-        latency_budget = 1.5*3
-        vram_budget = 1.5*6
-        postfix = "_lb"
+        postfix = "_posthoc"
         
-    print(method, filepath, patcher_filepath, with_gating, with_cost, latency_budget, vram_budget, postfix)
+    print(method, filepath, patcher_filepath, True, True, latency_budget, vram_budget, postfix)
     setup = setup_settings(dataset_name)
+
+    random.seed(42)
+    dataset = random.choices(dataset, k=200)
 
     kgraph = KnowledgeGraph(filepath, **setup)
     kgraph.build(knowledgebase)
     rag = RAGEngine(filepath, knowledgebase, knowledge_graph=kgraph, **setup)
 
-    patcher = BanditPatcher(filepath, latency_budget=latency_budget, vram_budget=vram_budget, method=method, alpha=2., with_gating=with_gating, with_cost=with_cost)
-    patcher.load_bandit(patcher_filepath, postfix)
+    patcher = BanditPatcher(filepath, latency_budget=latency_budget, vram_budget=vram_budget, method=method, alpha=2.)
 
     data = {
         "index": [],
@@ -129,24 +77,38 @@ if __name__ == "__main__":
             print(response_obj)
             print(failure_label)
 
-            context = patcher.get_context(question, failure_label, response_obj["consistency_check"], response_obj["entailment_check"]["query"], response_obj["entailment_check"]["response"], response_obj["latency"])
             patchset = "retriever" if response_obj["label"] == "UNVERIFIED" else "all"
             print("patchset:", patchset)
-            action = patcher.predict(context, patchset=patchset)
-            action_idx, params_updates = action
-            print(params_updates)
-
-            params.update(params_updates)
-            response_obj = rag.query(question, params=params, consistency_check=True, entailment_check=True)
-
-            failure_label, new_label = patcher.get_failure_label(response_obj)
-            response_obj["label"] = new_label
-            print(response_obj)
             
-            reward = patcher.calculate_reward(failure_label, response_obj["consistency_check"], response_obj["entailment_check"]["response"], response_obj["latency"], response_obj["vram_usage"])
+            action_idx = None
+            params_updates = None
+            response_obj = None
+            failure_label = None
+            reward = {"total_reward": -1000000.}
+            possible_actions = patcher.possible_actions if patchset == "all" else patcher.retriever_possible_actions
+            for action in possible_actions:
+                action_idx_, params_updates_ = action
+                print(params_updates_)
 
-            print(failure_label)
-            print(reward)
+                params_ = copy.deepcopy(params)
+                params_.update(params_updates_)
+                response_obj_ = rag.query(question, params=params_, consistency_check=True, entailment_check=True)
+
+                failure_label_, new_label_ = patcher.get_failure_label(response_obj_)
+                response_obj_["label"] = new_label_
+                print(response_obj_)
+                
+                reward_ = patcher.calculate_reward(failure_label_, response_obj_["consistency_check"], response_obj_["entailment_check"]["response"], response_obj_["latency"], response_obj_["vram_usage"])
+
+                print(failure_label_)
+                print(reward_)
+
+                if reward_["total_reward"] > reward["total_reward"]:
+                    action_idx = copy.deepcopy(action_idx_)
+                    params_updates = copy.deepcopy(params_updates_)
+                    response_obj = copy.deepcopy(response_obj_)
+                    failure_label = copy.deepcopy(failure_label_)
+                    reward = copy.deepcopy(reward_)
         
         data["index"].append(query_idx)
         retrieved_context = [item["text"] for item in response_obj["retrieved_context"]]
@@ -169,9 +131,8 @@ if __name__ == "__main__":
         data["context_recall"].append(context_recall(gt_context, retrieved_context))
         data["bandit_reward"].append(str(reward))
 
-        if "reindex" in params_updates.keys() and params_updates["reindex"]:
-            knowledgebase.reset()
-            rag.build_nodes()
+        knowledgebase.reset()
+        rag.build_nodes()
 
     dataset = Dataset.from_dict(data)
     dataset = dataset.to_pandas()
@@ -195,5 +156,5 @@ if __name__ == "__main__":
     print(f"######## Label (Incorrect) #######")
     print(dataset[dataset["EM"] == False]["gt_response"].value_counts())
     print(dataset[dataset["EM"] == False]["response_label"].value_counts())
-
+    
     dataset.to_csv(f"{filepath}/bandit_eval_dataset{postfix}.csv", sep="\t", index=False)

@@ -1,11 +1,9 @@
-from create_knowledge_base import WikipagesKnowledgeBase
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.core import Settings
 import torch
 from llama_index.llms.openai import OpenAI
 from datasets import load_dataset
 import json
-import csv
 import random
 random.seed(42)
 import pickle
@@ -14,12 +12,14 @@ import numpy as np
 import yaml
 from scipy.stats import bootstrap
 
+from src.create_knowledge_base import WikipagesKnowledgeBase
+
 
 def setup_settings(dataset):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     embedding_model = HuggingFaceEmbedding(model_name="sentence-transformers/all-MiniLM-L6-v2", device=device)
 
-    prompts_filepath = "prompts_shortanswer.yaml" if dataset in ["hotpotqa"] else "prompts.yaml"
+    prompts_filepath = "src/prompts_shortanswer.yaml" if dataset in ["hotpotqa"] else "src/prompts.yaml"
     with open(prompts_filepath, 'r') as f:
         prompts = yaml.load(f, Loader=yaml.FullLoader)
 
@@ -44,9 +44,6 @@ def setup_settings(dataset):
     return {
         "device": device, 
         "prompts": prompts,
-        # "prompt_rag_qa": rag_qa_prompt, 
-        # "prompt_WP": prompt_WP,
-        # "prompt_WR": prompt_WR,
         "similarity_top_k": similarity_top_k, 
         "reranker_top_n": reranker_top_n,
         "similarity_cutoff": similarity_cutoff,
@@ -55,61 +52,6 @@ def setup_settings(dataset):
         "kg_thresholds": kg_thresholds,
         "dense_retriever_storage": dense_retriever_storage,
         "bm25_retriever_storage": bm25_retriever_storage}
-
-def load_squad(split='train'):
-    dataset = load_dataset('squad', split=split)
-
-    dataset_pd = dataset.to_pandas()
-    dataset_pd = dataset_pd[['context', 'question', 'answers']]
-    dataset_pd['answers'] = dataset_pd['answers'].apply(lambda val: val['text']) #" and ".join(val['text']))
-    dataset_pd['context'] = dataset_pd['context'].apply(lambda val: val.strip())
-
-    contexts = dataset_pd.iloc[:10000]['context'].unique().tolist() 
-    print("Num unique contexts:", len(contexts), len(contexts))
-
-    dataset_pd = dataset_pd.iloc[:1000]
-    dataset = dataset_pd.values.tolist()
-    dataset = list(map(lambda item: (item[0], item[1], item[2].tolist()), dataset))
-
-    return dataset, (contexts, contexts)
-
-def load_triviaqa(split='train'):
-    dataset = load_dataset('mandarjoshi/trivia_qa', 'rc', split=f"{split}[:1000]")
-
-    contexts_fine = list(map(lambda item: item['entity_pages']['wiki_context'], dataset))
-    contexts_fine = contexts_fine[:500]
-    contexts_fine = list(set([item for ctx in contexts_fine for item in ctx]))
-    contexts_gran = [passage for ctx in contexts_fine for passage in ctx.split("\n\n")]
-    print("Num unique contexts:", len(contexts_fine), len(contexts_gran))
-
-    dataset = [([], q_item, [a_item["value"]]) for q_item, a_item in zip(dataset['question'], dataset['answer'])]
-
-    return dataset, (contexts_fine, contexts_gran)
-
-def load_nq(split='train'):
-    with open("./psgs_w100.tsv") as input_file:
-        contexts = []
-        tr = csv.reader(input_file, delimiter='\t')
-        next(tr)
-        for line in tr:
-            paragraph_text = line[1]
-            # title = line[2]
-            contexts.append(paragraph_text)
-
-            if len(contexts) >= 10000:
-                break
-
-    with open(f"./biencoder-nq-{split}.json", "r") as file:
-        instance = json.load(file)
-
-    # contexts = list(set([ctx["text"] for inst in instance for ctx in inst["positive_ctxs"]]))
-    # contexts = random.choices(contexts, k=10000)
-    print("Num unique contexts:", len(contexts), len(contexts))
-
-    instance = instance[:1000]
-    dataset = list(map(lambda item: ([], item["question"]+"?", item["answers"]), instance))
-
-    return dataset, (contexts, contexts)
 
 def load_fever(filepath, split='train'):
     with open(os.path.join(filepath, "knowledge_base.pkl"), 'rb') as f:

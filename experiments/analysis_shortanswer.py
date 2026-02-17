@@ -3,13 +3,14 @@ import os
 os.environ['JAX_PLATFORMS'] = 'cpu'
 
 import sys 
-from knowledge_graph import KnowledgeGraph
-from utils import load_hotpotqa, setup_settings
-from rag_engine import RAGEngine
 import tqdm
 from datasets import Dataset
-from patcher import BanditPatcher
 from qa_metrics.em import em_match
+
+from src.knowledge_graph import KnowledgeGraph
+from src.utils import load_hotpotqa, setup_settings
+from src.rag_engine import RAGEngine
+from src.patcher import BanditPatcher
 
 
 if __name__ == "__main__":

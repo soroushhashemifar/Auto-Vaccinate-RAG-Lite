@@ -1,10 +1,10 @@
-from bandits import LinUCB, ThompsonSampling
 import random
 import numpy as np
 import cloudpickle
-from sentence_transformers import SentenceTransformer
 import torch
 from transformers import AutoTokenizer, AutoModel
+
+from src.bandits import LinUCB, ThompsonSampling
 
 
 class BanditPatcher:
@@ -76,8 +76,6 @@ class BanditPatcher:
         return failure_label, rag_label
 
     def get_context(self, query, failure_label, consistency_check, query_entailment_check, response_entailment_check, action_latency):
-        # query_embedding = self.embedding_model.encode(query)
-        # query_embedding = torch.avg_pool1d(torch.from_numpy(query_embedding[None, ...]), 8)[0].numpy().tolist()
         inputs = self.embedding_tokenizer(query, return_tensors="pt", padding=True, truncation=True).to(self.device)
         with torch.no_grad():
             outputs = self.embedding_model(**inputs)
@@ -205,9 +203,6 @@ class BanditPatcher:
         }
         
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
-
-        # self.embedding_model = SentenceTransformer("all-MiniLM-L6-v2", device=device)
-        # hidden_size = 48
 
         self.embedding_tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
         self.embedding_model = AutoModel.from_pretrained("distilbert/distilbert-base-uncased").to(self.device)

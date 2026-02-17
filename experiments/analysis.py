@@ -2,14 +2,15 @@ import os
 # prevent JAX from using gpu to avoid bm25s eat up the gpu memory
 os.environ['JAX_PLATFORMS'] = 'cpu'
 
-import sys
-from knowledge_graph import KnowledgeGraph
-from utils import context_precision, context_recall, setup_settings, load_fever
-from rag_engine import RAGEngine
+import sys 
 import tqdm
 from datasets import Dataset
-from patcher import BanditPatcher 
 from qa_metrics.em import em_match
+
+from src.knowledge_graph import KnowledgeGraph
+from src.utils import context_precision, context_recall, setup_settings, load_fever
+from src.rag_engine import RAGEngine
+from src.patcher import BanditPatcher
 
 
 if __name__ == "__main__":

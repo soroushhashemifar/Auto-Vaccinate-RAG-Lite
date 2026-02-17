@@ -77,7 +77,6 @@ class WikipagesKnowledgeBase:
 
     def preprocess(self, text):
         text = text.replace("\t", " ").replace("\n", " ")
-        # text = text.split('.')[0]
         text = self.convert_brc(text)
         text = text.strip()
 
@@ -105,10 +104,6 @@ class WikipagesKnowledgeBase:
         meta_data = []
         sentences = []
         for evidence in filtered_evidences:
-            # sentences = re.split(r'\n\d+\t', "\n" + evidence[1])
-            # sentences = [preprocess(sentence) for sentence in sentences]
-            # sentences = list(filter(lambda sentence: len(sentence) > 0, sentences))
-
             text = self.preprocess(evidence[1])
             knowledge_base.append(text)
             
@@ -117,8 +112,6 @@ class WikipagesKnowledgeBase:
             text = self.convert_brc(evidence[2])
             text = text.strip()
             sentences.append(re.split(r'\n\d+\t', "\n" + text))
-            # for idx, sentence in enumerate(sentences):
-            #     meta_data.append({"doc_id": evidence[0], "sentence_id": idx})
 
         print("knowledge_base size:", len(knowledge_base))
 

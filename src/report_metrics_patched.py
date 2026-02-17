@@ -1,8 +1,9 @@
 import sys
-from evaluation import evaluate_rag
 import pandas as pd
 import numpy as np
-from utils import bootstrap_ci
+
+from src.evaluation import evaluate_rag
+from src.utils import bootstrap_ci
 
 
 def translate_actions(action):

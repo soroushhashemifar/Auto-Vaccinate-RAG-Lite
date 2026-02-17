@@ -1,5 +1,6 @@
 from transformers import pipeline
-from utils import singleton
+
+from src.utils import singleton
 
 
 @singleton
