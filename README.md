@@ -1,8 +1,8 @@
-# AutoVaccinate-RAG-Lite
+# Diagnosing and Repairing Factual Errors in RAG under Budget Constraints
 
-![AutoVaccinate-RAG-Lite](figures/arch.png)
+![D2R-RAG](figures/arch.png)
 
-**AutoVaccinate-RAG-Lite** is an adaptive, budget-aware framework designed to diagnose and repair factual failures in Retrieval-Augmented Generation (RAG) pipelines. By utilizing a contextual bandit policy (LinUCB/Thompson Sampling), the system dynamically selects the most effective patch (ranging from retrieval adjustments to query reformulations) based on real-time diagnostic signals.
+Retrieval-Augmented Generation (RAG) improves the factuality of large language models by grounding responses in external evidence, yet practical deployments remain brittle: failures arise from missing evidence, noisy retrieval, and generation that is unfaithful to the retrieved context. We propose **D2R-RAG** (Diagnose-to-Repair RAG), a model-agnostic, resource-aware framework that couples lightweight failure diagnosis with adaptive repair. **D2R-RAG** produces interpretable failure signatures from observable signals in the query, retrieved evidence, and generated response, and uses these signals to adaptively select among a small set of corrective actions under explicit latency and VRAM budgets.
 
 ---
 
