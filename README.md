@@ -16,8 +16,8 @@ Retrieval-Augmented Generation (RAG) improves the factuality of large language m
 ### Installation
 
 ```bash
-git clone https://github.com/[your-username]/AutoVaccinate-RAG-Lite.git
-cd AutoVaccinate-RAG-Lite
+git clone https://github.com/[your-username]/D2RRAG.git
+cd D2RRAG
 bash run.sh
 
 ```
